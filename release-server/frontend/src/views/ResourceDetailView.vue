@@ -115,27 +115,12 @@
           <button type="button" class="folder-card-link" @click="browsePath = f.path">
             <span class="folder-glyph" aria-hidden="true">📁</span>
             <div class="folder-card-text">
-              <span class="item-title">{{ folderCardTitle(f) }}</span>
+              <span class="item-title">{{ f.name }}</span>
               <span class="folder-sub">点击进入文件夹</span>
             </div>
           </button>
         </header>
-        <div v-if="f.id" class="item-body">
-          <label class="lbl">显示名（可选）</label>
-          <input v-model="folderEdits[f.id].displayName" class="input sm" :disabled="pageLoading" />
-          <label class="lbl">简介（可选）</label>
-          <textarea v-model="folderEdits[f.id].description" class="textarea sm" rows="2" :disabled="pageLoading" />
-        </div>
         <div class="item-actions">
-          <button
-            v-if="f.id"
-            type="button"
-            class="btn btn-primary btn-sm"
-            :disabled="savingFolder === f.id || pageLoading"
-            @click="saveFolder(f.id)"
-          >
-            保存此文件夹
-          </button>
           <button type="button" class="btn btn-primary btn-sm" @click="browsePath = f.path">进入</button>
           <button type="button" class="btn btn-sm btn-ghost" @click="copy(folderArchiveUrl(f))">复制 ZIP 直链</button>
           <a
@@ -221,16 +206,11 @@ const idEdit = ref('');
 const savingMeta = ref(false);
 const savingId = ref(false);
 const savingItem = ref(null);
-const savingFolder = ref(null);
 const deletingItem = ref(null);
 const uploading = ref(false);
 const items = ref([]);
 /** 每项编辑草稿；键与 items[].id 对齐，模板 v-model 依赖此对象已存在 */
 const itemEdits = reactive({});
-/** 文件夹实体列表（来自服务端 d.folders[]） */
-const foldersMeta = ref([]);
-/** 文件夹编辑草稿；键与 folder.id 对齐 */
-const folderEdits = reactive({});
 const uploadPct = ref(null);
 const browsePath = ref('');
 
@@ -254,12 +234,7 @@ const browseListing = computed(() => listDirectoryLevel(items.value, browsePath.
 const browseFolders = computed(() => browseListing.value.folders);
 const browseFiles = computed(() => browseListing.value.files);
 const hasNestedPaths = computed(() => items.value.some(it => String(it.fileName || '').includes('/')));
-const displayFolders = computed(() =>
-  browseFolders.value.map(f => {
-    const meta = foldersMeta.value.find(m => m.folderPath === f.path) || {};
-    return { ...f, id: meta.id || '', displayName: meta.displayName || '', description: meta.description || '' };
-  }),
-);
+const displayFolders = computed(() => browseFolders.value);
 const displayItems = computed(() => browseFiles.value);
 const browseArchiveUrl = computed(() => {
   if (!publicBase.value || !libraryName.value) return '';
@@ -303,12 +278,6 @@ function itemCardTitle(it) {
   return it.name || fileBaseName(it.fileName) || it.fileName;
 }
 
-function folderCardTitle(f) {
-  if (!f.id) return f.name;
-  const dn = folderEdits[f.id]?.displayName?.trim();
-  return dn || f.name;
-}
-
 function itemInSubfolder(it) {
   return String(it.fileName || '').includes('/');
 }
@@ -348,19 +317,6 @@ function primeItemEdits(list) {
   }
 }
 
-function primeFolderEdits(list) {
-  const ids = new Set((list || []).map(f => f.id));
-  for (const k of Object.keys(folderEdits)) {
-    if (!ids.has(k)) delete folderEdits[k];
-  }
-  for (const f of list || []) {
-    if (f.id && !folderEdits[f.id]) {
-      folderEdits[f.id] = { displayName: f.displayName || '', description: f.description || '' };
-    }
-  }
-  foldersMeta.value = list || [];
-}
-
 function applyDetail(d) {
   displayNameEdit.value = d.displayName != null ? String(d.displayName) : '';
   descriptionEdit.value = d.description != null ? String(d.description) : '';
@@ -368,7 +324,6 @@ function applyDetail(d) {
   const raw = d.items || [];
   items.value = raw.map(enrichItem);
   primeItemEdits(raw);
-  primeFolderEdits(d.folders || []);
 }
 
 async function loadPage() {
@@ -489,32 +444,6 @@ async function saveItem(id) {
   }
 }
 
-async function saveFolder(folderId) {
-  const ed = folderEdits[folderId];
-  if (!ed) return;
-  if ((ed.description || '').length > 6000) {
-    toast('简介过长（最多 6000 字）', 'error');
-    return;
-  }
-  savingFolder.value = folderId;
-  try {
-    const r = await api(
-      'PATCH',
-      `/api/resources/${encodeURIComponent(libraryName.value)}/folders/${encodeURIComponent(folderId)}`,
-      { displayName: ed.displayName, description: ed.description },
-    );
-    const updated = r.folder;
-    const i = foldersMeta.value.findIndex(f => f.id === updated.id);
-    if (i >= 0) foldersMeta.value[i] = { ...foldersMeta.value[i], ...updated };
-    folderEdits[folderId] = { displayName: updated.displayName || '', description: updated.description || '' };
-    toast('已保存');
-  } catch (e) {
-    toast(e.message, 'error');
-  } finally {
-    savingFolder.value = null;
-  }
-}
-
 async function confirmDeleteItem(it) {
   if (!window.confirm(`删除文件「${it.fileName}」？磁盘文件与列表项都会删除。`)) return;
   deletingItem.value = it.id;
@@ -578,11 +507,6 @@ async function doUploadItems(uploadItems) {
       }
     }
     items.value.sort((a, b) => a.fileName.localeCompare(b.fileName, undefined, { numeric: true }));
-    // Refresh folder metadata so new auto-upserted folder entities become available for editing
-    try {
-      const d = await api('GET', `/api/resources/${encodeURIComponent(libraryName.value)}`);
-      primeFolderEdits(d.folders || []);
-    } catch {}
     const msg =
       failed > 0
         ? `${desc.label}：成功 ${totalUploaded}，失败 ${failed}`
@@ -606,8 +530,6 @@ watch(
     if (oldName !== undefined && name !== oldName) {
       items.value = [];
       for (const k of Object.keys(itemEdits)) delete itemEdits[k];
-      foldersMeta.value = [];
-      for (const k of Object.keys(folderEdits)) delete folderEdits[k];
       displayNameEdit.value = '';
       descriptionEdit.value = '';
       idEdit.value = decodeURIComponent(name || '');

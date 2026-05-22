@@ -251,23 +251,16 @@ function buildResourceFileCardHtml(it) {
 }
 
 function buildFolderCardHtml(f) {
-  const title = (f.displayName && String(f.displayName).trim()) || f.name;
-  const descInner =
-    f.description && String(f.description).trim()
-      ? `<div class="res-card-desc">${formatPlainMultiline(String(f.description).trim())}</div>`
-      : '';
-  const mainBlock = descInner ? `<div class="res-card-main">${descInner}</div>` : '';
   return `<article class="res-card res-card--folder">
   <header class="res-card-head">
     <a class="res-card-folder-link" href="${htmlEsc(f.browseUrl || '#')}">
       <span class="folder-glyph" aria-hidden="true">📁</span>
       <div>
-        <span class="folder-name">${htmlEsc(title)}</span>
+        <span class="folder-name">${htmlEsc(f.name)}</span>
         <span class="folder-sub">进入文件夹</span>
       </div>
     </a>
   </header>
-  ${mainBlock}
   <footer class="res-card-foot">
     <span class="res-sz">文件夹</span>
     <a class="btn-dl" href="${htmlEsc(f.archiveUrl || '#')}" download rel="noopener">⬇ 下载</a>

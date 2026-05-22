@@ -89,16 +89,6 @@ function normalizeIndex(name, raw) {
       updatedAt: it.updatedAt != null ? String(it.updatedAt) : new Date(0).toISOString(),
     }))
     .filter(it => it.id && it.fileName);
-  if (!Array.isArray(o.folders)) o.folders = [];
-  o.folders = o.folders
-    .filter(f => f && typeof f === 'object')
-    .map(f => ({
-      id: String(f.id || ''),
-      folderPath: String(f.folderPath || ''),
-      displayName: f.displayName != null ? String(f.displayName).trim() : '',
-      description: f.description != null ? String(f.description).trim() : '',
-    }))
-    .filter(f => f.id && f.folderPath);
   if (o.displayName != null) o.displayName = String(o.displayName).trim() || undefined;
   if (o.description != null) {
     const d = String(o.description).trim();
@@ -363,47 +353,8 @@ function registerUploadBatch(name, multerFiles) {
     uploaded.push(item);
   }
   idx.items.sort((a, b) => a.fileName.localeCompare(b.fileName, undefined, { numeric: true }));
-  // Auto-upsert folder entities for any directory prefix found in uploaded files
-  if (!Array.isArray(idx.folders)) idx.folders = [];
-  for (const item of uploaded) {
-    const slash = String(item.fileName).indexOf('/');
-    if (slash < 1) continue;
-    const topDir = item.fileName.slice(0, slash);
-    if (!idx.folders.find(f => f.folderPath === topDir)) {
-      idx.folders.push({ id: crypto.randomUUID(), folderPath: topDir, displayName: '', description: '' });
-    }
-    // Also upsert deeper directory paths
-    const parts = item.fileName.split('/');
-    for (let i = 1; i < parts.length - 1; i++) {
-      const dirPath = parts.slice(0, i + 1).join('/');
-      if (!idx.folders.find(f => f.folderPath === dirPath)) {
-        idx.folders.push({ id: crypto.randomUUID(), folderPath: dirPath, displayName: '', description: '' });
-      }
-    }
-  }
   writeIndex(name, idx);
   return { uploaded };
-}
-
-function patchFolder(name, folderId, body = {}) {
-  if (!libraryExists(name)) return { error: '资源库不存在', status: 404 };
-  const idx = readIndex(name);
-  if (!idx) return { error: '索引损坏', status: 500 };
-  const id = String(folderId || '');
-  const i = (idx.folders || []).findIndex(f => f.id === id);
-  if (i < 0) return { error: '文件夹不存在', status: 404 };
-  const folder = { ...idx.folders[i] };
-  if (body.displayName !== undefined) {
-    folder.displayName = body.displayName == null ? '' : String(body.displayName).trim();
-  }
-  if (body.description !== undefined) {
-    let t = body.description == null ? '' : String(body.description);
-    if (t.length > 6000) return { error: '简介过长（最多 6000 字）', status: 400 };
-    folder.description = t.trim();
-  }
-  idx.folders[i] = folder;
-  writeIndex(name, idx);
-  return { success: true, folder };
 }
 
 function patchItem(name, itemId, body = {}) {
@@ -481,17 +432,11 @@ function toPublicPayload(name, opts = {}) {
     breadcrumbs: crumbs,
     browseUrl: libraryBrowseUrl(name, normPath || ''),
     archiveUrl: libraryArchiveUrl(name, normPath || ''),
-    folders: listing.folders.map(f => {
-      const meta = (idx.folders || []).find(x => x.folderPath === f.path) || {};
-      return {
-        ...f,
-        id: meta.id || '',
-        displayName: meta.displayName || '',
-        description: meta.description || '',
-        browseUrl: libraryBrowseUrl(name, f.path),
-        archiveUrl: libraryArchiveUrl(name, f.path),
-      };
-    }),
+    folders: listing.folders.map(f => ({
+      ...f,
+      browseUrl: libraryBrowseUrl(name, f.path),
+      archiveUrl: libraryArchiveUrl(name, f.path),
+    })),
     files: listing.files.map(it => ({
       id: it.id,
       name: it.name,
@@ -528,7 +473,6 @@ function toAdminDetail(name) {
     displayLabel: label,
     description: idx.description || '',
     itemCount: items.length,
-    folders: (idx.folders || []).slice().sort((a, b) => a.folderPath.localeCompare(b.folderPath, undefined, { numeric: true })),
     items: items.map(it => ({
       ...it,
       downloadUrl: itemDownloadUrl(name, it.fileName),
@@ -564,7 +508,6 @@ module.exports = {
   registerUpload,
   registerUploadBatch,
   patchItem,
-  patchFolder,
   deleteItem,
   resolveResourceFile,
   itemDownloadUrl,
