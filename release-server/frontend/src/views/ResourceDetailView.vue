@@ -86,9 +86,9 @@
       <div v-else-if="uploadPct === -1" class="prog indet">上传中（无法计算进度）…</div>
     </section>
 
-    <section v-if="items.length || foldersMeta.length" class="card items-section" :class="{ 'section-dim': pageLoading }">
+    <section v-if="items.length" class="card items-section" :class="{ 'section-dim': pageLoading }">
       <div class="items-section-head">
-        <h2>{{ browsePath ? '文件夹内容' : '资源文件与文件夹' }}</h2>
+        <h2>资源文件</h2>
       </div>
       <nav v-if="hasNestedPaths || browsePath" class="file-crumbs" aria-label="路径">
         <button
@@ -135,15 +135,6 @@
             @click="saveFolder(f.id)"
           >
             保存此文件夹
-          </button>
-          <button
-            v-if="f.id"
-            type="button"
-            class="btn btn-sm btn-ghost danger"
-            :disabled="deletingFolder === f.id || savingFolder === f.id || pageLoading"
-            @click="confirmDeleteFolder(f)"
-          >
-            删除文件夹
           </button>
           <button type="button" class="btn btn-primary btn-sm" @click="browsePath = f.path">进入</button>
           <button type="button" class="btn btn-sm btn-ghost" @click="copy(folderArchiveUrl(f))">复制 ZIP 直链</button>
@@ -201,11 +192,8 @@
         </div>
       </article>
       </transition-group>
-      <p v-if="!pageLoading && !displayFolders.length && !displayItems.length" class="muted empty-hint">
-        当前目录为空。
-      </p>
     </section>
-    <p v-if="!pageLoading && !items.length && !foldersMeta.length" class="muted empty-hint">暂无文件，请上传。</p>
+    <p v-if="!pageLoading && !items.length" class="muted empty-hint">暂无文件，请上传。</p>
   </div>
 </template>
 
@@ -234,7 +222,6 @@ const savingMeta = ref(false);
 const savingId = ref(false);
 const savingItem = ref(null);
 const savingFolder = ref(null);
-const deletingFolder = ref(null);
 const deletingItem = ref(null);
 const uploading = ref(false);
 const items = ref([]);
@@ -267,35 +254,12 @@ const browseListing = computed(() => listDirectoryLevel(items.value, browsePath.
 const browseFolders = computed(() => browseListing.value.folders);
 const browseFiles = computed(() => browseListing.value.files);
 const hasNestedPaths = computed(() => items.value.some(it => String(it.fileName || '').includes('/')));
-const displayFolders = computed(() => {
-  const base = browsePath.value;
-  const metaByPath = new Map(foldersMeta.value.map(m => [m.folderPath, m]));
-  const byPath = new Map();
-
-  for (const f of browseFolders.value) {
-    const meta = metaByPath.get(f.path) || {};
-    byPath.set(f.path, {
-      ...f,
-      id: meta.id || '',
-      displayName: meta.displayName || '',
-      description: meta.description || '',
-    });
-  }
-
-  for (const meta of foldersMeta.value) {
-    const p = meta.folderPath;
-    if (!p || !isDirectChildFolder(p, base) || byPath.has(p)) continue;
-    byPath.set(p, {
-      name: p.split('/').pop() || p,
-      path: p,
-      id: meta.id || '',
-      displayName: meta.displayName || '',
-      description: meta.description || '',
-    });
-  }
-
-  return [...byPath.values()].sort((a, b) => a.name.localeCompare(b.name, undefined, { numeric: true }));
-});
+const displayFolders = computed(() =>
+  browseFolders.value.map(f => {
+    const meta = foldersMeta.value.find(m => m.folderPath === f.path) || {};
+    return { ...f, id: meta.id || '', displayName: meta.displayName || '', description: meta.description || '' };
+  }),
+);
 const displayItems = computed(() => browseFiles.value);
 const browseArchiveUrl = computed(() => {
   if (!publicBase.value || !libraryName.value) return '';
@@ -368,15 +332,6 @@ function folderArchiveUrl(f) {
   return `${base}/r/${encodeURIComponent(name)}/archive${q}`;
 }
 
-function isDirectChildFolder(folderPath, currentPath) {
-  const base = currentPath || '';
-  if (!folderPath) return false;
-  if (!base) return !folderPath.includes('/');
-  const prefix = `${base}/`;
-  if (!folderPath.startsWith(prefix) || folderPath === base) return false;
-  return !folderPath.slice(prefix.length).includes('/');
-}
-
 function primeItemEdits(list) {
   const ids = new Set((list || []).map(x => x.id));
   for (const k of Object.keys(itemEdits)) {
@@ -403,6 +358,7 @@ function primeFolderEdits(list) {
       folderEdits[f.id] = { displayName: f.displayName || '', description: f.description || '' };
     }
   }
+  foldersMeta.value = list || [];
 }
 
 function applyDetail(d) {
@@ -411,27 +367,20 @@ function applyDetail(d) {
   idEdit.value = libraryName.value;
   const raw = d.items || [];
   items.value = raw.map(enrichItem);
-  foldersMeta.value = d.folders || [];
   primeItemEdits(raw);
   primeFolderEdits(d.folders || []);
-}
-
-async function loadDetail() {
-  const d = await api('GET', `/api/resources/${encodeURIComponent(libraryName.value)}`);
-  applyDetail(d);
 }
 
 async function loadPage() {
   pageLoading.value = true;
   try {
     await loadSettingsBase();
-    await loadDetail();
+    const d = await api('GET', `/api/resources/${encodeURIComponent(libraryName.value)}`);
+    applyDetail(d);
   } catch (e) {
     toast(e.message, 'error');
     items.value = [];
-    foldersMeta.value = [];
     for (const k of Object.keys(itemEdits)) delete itemEdits[k];
-    for (const k of Object.keys(folderEdits)) delete folderEdits[k];
   } finally {
     pageLoading.value = false;
   }
@@ -566,25 +515,6 @@ async function saveFolder(folderId) {
   }
 }
 
-async function confirmDeleteFolder(f) {
-  if (!f?.id) return;
-  const label = folderCardTitle(f) || f.name || f.path;
-  if (!window.confirm(`删除整个文件夹「${label}」？文件夹内所有文件都会删除，此操作不可恢复。`)) return;
-  deletingFolder.value = f.id;
-  try {
-    await api('DELETE', `/api/resources/${encodeURIComponent(libraryName.value)}/folders/${encodeURIComponent(f.id)}`);
-    toast('已删除文件夹');
-    if (browsePath.value === f.path || browsePath.value.startsWith(`${f.path}/`)) {
-      browsePath.value = '';
-    }
-    await loadDetail();
-  } catch (e) {
-    toast(e.message, 'error');
-  } finally {
-    deletingFolder.value = null;
-  }
-}
-
 async function confirmDeleteItem(it) {
   if (!window.confirm(`删除文件「${it.fileName}」？磁盘文件与列表项都会删除。`)) return;
   deletingItem.value = it.id;
@@ -619,6 +549,7 @@ async function doUploadItems(uploadItems) {
   uploading.value = true;
   uploadPct.value = 0;
   let totalUploaded = 0;
+  let failed = 0;
   try {
     for (let i = 0; i < uploadItems.length; i += UPLOAD_BATCH) {
       const batch = uploadItems.slice(i, i + UPLOAD_BATCH);
@@ -634,17 +565,29 @@ async function doUploadItems(uploadItems) {
       });
       const uploaded = data?.uploaded || [];
       totalUploaded += uploaded.length;
-    }
-    await loadDetail();
-    browsePath.value = '';
-    if (desc.isFolder) {
-      const nested = items.value.filter(it => String(it.fileName || '').includes('/'));
-      if (!nested.length) {
-        toast('上传完成，但文件夹路径未保留（文件被拆散）。请 Ctrl+Shift+R 硬刷新后重试。', 'error');
-        return;
+      for (const u of uploaded) {
+        const e = enrichItem(u);
+        const ix = items.value.findIndex(x => x.fileName === e.fileName);
+        if (ix >= 0) items.value.splice(ix, 1);
+        items.value.push(e);
+        itemEdits[u.id] = {
+          displayName: u.displayName || '',
+          version: u.version || '',
+          description: u.description || '',
+        };
       }
     }
-    toast(`${desc.label}：已上传 ${totalUploaded} 个文件`);
+    items.value.sort((a, b) => a.fileName.localeCompare(b.fileName, undefined, { numeric: true }));
+    // Refresh folder metadata so new auto-upserted folder entities become available for editing
+    try {
+      const d = await api('GET', `/api/resources/${encodeURIComponent(libraryName.value)}`);
+      primeFolderEdits(d.folders || []);
+    } catch {}
+    const msg =
+      failed > 0
+        ? `${desc.label}：成功 ${totalUploaded}，失败 ${failed}`
+        : `${desc.label}：已上传 ${totalUploaded} 个文件`;
+    toast(msg);
   } catch (e) {
     toast(e.message || '上传失败', 'error');
   } finally {

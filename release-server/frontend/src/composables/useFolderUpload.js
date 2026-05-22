@@ -77,26 +77,16 @@ async function readEntry(entry, prefix = '') {
 export async function ingestFromDataTransfer(dt) {
   if (!dt) return [];
   const items = dt.items ? [...dt.items] : [];
-  const files = dt.files ? [...dt.files] : [];
-
-  let fromEntries = [];
   if (items.length && items[0]?.webkitGetAsEntry) {
+    const out = [];
     for (const item of items) {
       const entry = item.webkitGetAsEntry?.();
-      if (entry) fromEntries.push(...(await readEntry(entry)));
+      if (entry) out.push(...(await readEntry(entry)));
     }
+    if (out.length) return out;
   }
-
-  const fromFiles = files.map(file => ({ file, relativePath: fileRelativePath(file) }));
-  const entriesNested = fromEntries.some(it => it.relativePath.includes('/'));
-  const filesNested = fromFiles.some(it => it.relativePath.includes('/'));
-
-  if (fromEntries.length && (entriesNested || (!filesNested && fromEntries.length === 1))) {
-    return fromEntries;
-  }
-  if (filesNested) return fromFiles;
-  if (fromEntries.length) return fromEntries;
-  return fromFiles;
+  const files = dt.files ? [...dt.files] : [];
+  return files.map(file => ({ file, relativePath: fileRelativePath(file) }));
 }
 
 export async function ingestFromFileList(fileList) {
@@ -165,9 +155,8 @@ export function describeUploadBatch(items) {
 }
 
 export function appendToFormData(formData, items, fileField = 'files') {
-  const paths = items.map(it => it.relativePath || it.file.name);
-  formData.append('relativePaths', JSON.stringify(paths));
-  for (let i = 0; i < items.length; i++) {
-    formData.append(fileField, items[i].file, paths[i]);
+  for (const it of items) {
+    const name = it.relativePath || it.file.name;
+    formData.append(fileField, it.file, name);
   }
 }
