@@ -64,10 +64,10 @@ async function readEntry(entry, prefix = '') {
       };
       readBatch();
     });
+    const base = prefix || entry.name;
     const out = [];
     for (const child of children) {
-      const childPrefix = prefix ? `${prefix}/${child.name}` : child.name;
-      out.push(...(await readEntry(child, childPrefix)));
+      out.push(...(await readEntry(child, `${base}/${child.name}`)));
     }
     return out;
   }

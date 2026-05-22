@@ -439,6 +439,7 @@ function toPublicPayload(name, opts = {}) {
     })),
     files: listing.files.map(it => ({
       id: it.id,
+      name: it.name,
       fileName: it.relativePath,
       displayName: it.displayName || '',
       description: it.description || '',

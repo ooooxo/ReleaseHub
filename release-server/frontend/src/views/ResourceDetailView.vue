@@ -73,7 +73,7 @@
         :hint="
           uploading
             ? '正在上传…'
-            : '拖拽文件或文件夹到此处，或点击选择（自动识别目录结构；同名覆盖并保留元数据）'
+            : '拖拽文件或文件夹到此处，或点击选择（文件夹整体保留，内部文件不会拆散显示）'
         "
         @items="onUploadItems"
       />
@@ -89,17 +89,8 @@
     <section v-if="items.length" class="card items-section" :class="{ 'section-dim': pageLoading }">
       <div class="items-section-head">
         <h2>资源文件</h2>
-        <button
-          v-if="hasNestedPaths"
-          type="button"
-          class="btn btn-sm btn-ghost"
-          @click="folderBrowse = !folderBrowse"
-        >
-          {{ folderBrowse ? '显示全部卡片' : '按文件夹浏览' }}
-        </button>
       </div>
-      <template v-if="folderBrowse && hasNestedPaths">
-      <nav class="file-crumbs" aria-label="路径">
+      <nav v-if="hasNestedPaths || browsePath" class="file-crumbs" aria-label="路径">
         <button
           v-for="(c, i) in browseCrumbs"
           :key="c.path"
@@ -111,16 +102,35 @@
           {{ c.label }}
         </button>
       </nav>
-      <p v-if="browseArchiveUrl" class="hint sm">
+      <p v-if="browseArchiveUrl && (hasNestedPaths || browsePath)" class="hint sm">
         <button type="button" class="btn btn-sm btn-ghost" @click="copy(browseArchiveUrl)">复制当前目录 ZIP 直链</button>
       </p>
-      <ul v-if="browseFolders.length" class="folder-list">
-        <li v-for="f in browseFolders" :key="f.path">
-          <button type="button" class="folder-row" @click="browsePath = f.path">📁 {{ f.name }}</button>
-        </li>
-      </ul>
-      </template>
       <transition-group name="res-card" tag="div" class="items-grid">
+      <article
+        v-for="f in displayFolders"
+        :key="'folder-' + f.path"
+        class="card item-card folder-card"
+      >
+        <header class="item-head">
+          <button type="button" class="folder-card-link" @click="browsePath = f.path">
+            <span class="folder-glyph" aria-hidden="true">📁</span>
+            <div class="folder-card-text">
+              <span class="item-title">{{ f.name }}</span>
+              <span class="folder-sub">点击进入文件夹</span>
+            </div>
+          </button>
+        </header>
+        <div class="item-actions">
+          <button type="button" class="btn btn-primary btn-sm" @click="browsePath = f.path">进入</button>
+          <button type="button" class="btn btn-sm btn-ghost" @click="copy(folderArchiveUrl(f))">复制 ZIP 直链</button>
+          <a
+            class="btn btn-sm btn-ghost"
+            :href="folderArchiveUrl(f)"
+            download
+            rel="noopener"
+          >下载 ZIP</a>
+        </div>
+      </article>
       <article v-for="it in displayItems" :key="it.id" class="card item-card">
         <header class="item-head">
           <div class="item-title-block">
@@ -128,12 +138,6 @@
               <span class="item-title">{{ itemCardTitle(it) }}</span>
               <span v-if="itemEdits[it.id]?.version?.trim()" class="item-ver">{{ itemEdits[it.id].version.trim() }}</span>
             </div>
-            <span
-              v-if="itemCardSubtitle(it)"
-              class="item-path"
-              :class="{ 'path-font': folderBrowse && hasNestedPaths }"
-              :title="it.fileName"
-            >{{ itemCardSubtitle(it) }}</span>
           </div>
           <span class="sz">{{ fmtSize(it.size) }}</span>
         </header>
@@ -209,7 +213,6 @@ const items = ref([]);
 const itemEdits = reactive({});
 const uploadPct = ref(null);
 const browsePath = ref('');
-const folderBrowse = ref(false);
 
 const displayLabel = computed(() => displayNameEdit.value.trim() || libraryName.value);
 
@@ -231,9 +234,8 @@ const browseListing = computed(() => listDirectoryLevel(items.value, browsePath.
 const browseFolders = computed(() => browseListing.value.folders);
 const browseFiles = computed(() => browseListing.value.files);
 const hasNestedPaths = computed(() => items.value.some(it => String(it.fileName || '').includes('/')));
-const displayItems = computed(() =>
-  folderBrowse.value && hasNestedPaths.value ? browseFiles.value : items.value,
-);
+const displayFolders = computed(() => browseFolders.value);
+const displayItems = computed(() => browseFiles.value);
 const browseArchiveUrl = computed(() => {
   if (!publicBase.value || !libraryName.value) return '';
   const q = browsePath.value ? `?path=${encodeURIComponent(browsePath.value)}` : '';
@@ -273,15 +275,7 @@ function fileBaseName(path) {
 function itemCardTitle(it) {
   const dn = itemEdits[it.id]?.displayName?.trim();
   if (dn) return dn;
-  return fileBaseName(it.fileName) || it.fileName;
-}
-
-function itemCardSubtitle(it) {
-  const path = String(it.fileName || '');
-  const dn = itemEdits[it.id]?.displayName?.trim();
-  if (dn && dn !== fileBaseName(path)) return path;
-  if (path.includes('/')) return path;
-  return '';
+  return it.name || fileBaseName(it.fileName) || it.fileName;
 }
 
 function itemInSubfolder(it) {
@@ -296,6 +290,14 @@ function itemFolderZip(it) {
   parts.pop();
   const dir = parts.join('/');
   const q = dir ? `?path=${encodeURIComponent(dir)}` : '';
+  return `${base}/r/${encodeURIComponent(name)}/archive${q}`;
+}
+
+function folderArchiveUrl(f) {
+  const base = publicBase.value;
+  const name = libraryName.value;
+  if (!base || !name || !f?.path) return '';
+  const q = f.path ? `?path=${encodeURIComponent(f.path)}` : '';
   return `${base}/r/${encodeURIComponent(name)}/archive${q}`;
 }
 
@@ -531,6 +533,7 @@ watch(
       displayNameEdit.value = '';
       descriptionEdit.value = '';
       idEdit.value = decodeURIComponent(name || '');
+      browsePath.value = '';
     }
     loadPage();
   },
@@ -757,25 +760,35 @@ h1 {
   color: var(--text);
   cursor: default;
 }
-.folder-list {
-  list-style: none;
-  margin: 0 0 14px;
-  padding: 0;
+.folder-card .item-head {
+  border-bottom: none;
 }
-.folder-row {
+.folder-card-link {
+  display: flex;
+  align-items: center;
+  gap: 12px;
   width: 100%;
   text-align: left;
-  background: rgba(232, 160, 53, 0.06);
-  border: 1px solid var(--border);
-  border-radius: var(--radius-sm);
-  padding: 10px 12px;
-  color: var(--text);
+  background: none;
+  border: none;
+  padding: 0;
+  color: inherit;
   cursor: pointer;
-  font-size: 14px;
-  margin-bottom: 6px;
+  font: inherit;
 }
-.folder-row:hover {
-  border-color: rgba(232, 160, 53, 0.35);
+.folder-glyph {
+  font-size: 28px;
+  line-height: 1;
+  flex-shrink: 0;
+}
+.folder-card-text {
+  min-width: 0;
+}
+.folder-sub {
+  display: block;
+  margin-top: 4px;
+  font-size: 12px;
+  color: var(--text3);
 }
 .path-font {
   font-family: var(--font-path, 'IBM Plex Mono'), ui-monospace, monospace;
