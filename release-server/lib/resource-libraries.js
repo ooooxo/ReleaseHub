@@ -111,7 +111,39 @@ function normalizeIndex(name, raw) {
 function readIndex(name) {
   const raw = readIndexRaw(name);
   if (!raw) return null;
-  return normalizeIndex(name, raw);
+  const idx = normalizeIndex(name, raw);
+  if (!(idx.folders || []).length) {
+    ensureFoldersFromItems(idx);
+    if (idx.folders.length) writeIndex(name, idx);
+  }
+  return idx;
+}
+
+/** Backfill folder entities from item path prefixes (does not overwrite existing meta). */
+function ensureFoldersFromItems(idx) {
+  if (!idx || !Array.isArray(idx.items)) return;
+  if (!Array.isArray(idx.folders)) idx.folders = [];
+  const known = new Set(idx.folders.map(f => f.folderPath));
+  let changed = false;
+  for (const it of idx.items) {
+    const fn = String(it.fileName || '');
+    if (!fn.includes('/')) continue;
+    const parts = fn.split('/');
+    for (let i = 0; i < parts.length - 1; i++) {
+      const dirPath = parts.slice(0, i + 1).join('/');
+      if (known.has(dirPath)) continue;
+      known.add(dirPath);
+      idx.folders.push({ id: crypto.randomUUID(), folderPath: dirPath, displayName: '', description: '' });
+      changed = true;
+    }
+  }
+  if (changed) {
+    idx.folders.sort((a, b) => a.folderPath.localeCompare(b.folderPath, undefined, { numeric: true }));
+  }
+}
+
+function folderMetaByPath(folders) {
+  return new Map((folders || []).map(f => [f.folderPath, f]));
 }
 
 function ensureLibraryFilesDir(name) {
@@ -323,9 +355,11 @@ function registerUploadBatch(name, multerFiles) {
   if (!list.length) return { uploaded: [] };
   const idx = readIndex(name);
   if (!idx) return { error: '索引损坏', status: 500 };
+
+  const itemsByFile = new Map(idx.items.map(it => [it.fileName, it]));
   const uploaded = [];
   for (const f of list) {
-    const fn = normalizeRelativePath(f.originalname);
+    const fn = normalizeRelativePath(f._rlResolvedPath || f.originalname);
     if (!fn) {
       return { error: `无效文件路径：${f.originalname || '(空)'}`, status: 400 };
     }
@@ -342,7 +376,7 @@ function registerUploadBatch(name, multerFiles) {
     if (!st.isFile()) {
       return { error: `非文件：${fn}`, status: 400 };
     }
-    const existing = idx.items.find(it => it.fileName === fn);
+    const existing = itemsByFile.get(fn);
     const item = existing
       ? {
           ...existing,
@@ -358,29 +392,13 @@ function registerUploadBatch(name, multerFiles) {
           size: st.size,
           updatedAt: st.mtime.toISOString(),
         };
-    idx.items = idx.items.filter(it => it.fileName !== fn);
-    idx.items.push(item);
+    itemsByFile.set(fn, item);
     uploaded.push(item);
   }
-  idx.items.sort((a, b) => a.fileName.localeCompare(b.fileName, undefined, { numeric: true }));
-  // Auto-upsert folder entities for any directory prefix found in uploaded files
-  if (!Array.isArray(idx.folders)) idx.folders = [];
-  for (const item of uploaded) {
-    const slash = String(item.fileName).indexOf('/');
-    if (slash < 1) continue;
-    const topDir = item.fileName.slice(0, slash);
-    if (!idx.folders.find(f => f.folderPath === topDir)) {
-      idx.folders.push({ id: crypto.randomUUID(), folderPath: topDir, displayName: '', description: '' });
-    }
-    // Also upsert deeper directory paths
-    const parts = item.fileName.split('/');
-    for (let i = 1; i < parts.length - 1; i++) {
-      const dirPath = parts.slice(0, i + 1).join('/');
-      if (!idx.folders.find(f => f.folderPath === dirPath)) {
-        idx.folders.push({ id: crypto.randomUUID(), folderPath: dirPath, displayName: '', description: '' });
-      }
-    }
-  }
+  idx.items = [...itemsByFile.values()].sort((a, b) =>
+    a.fileName.localeCompare(b.fileName, undefined, { numeric: true }),
+  );
+  ensureFoldersFromItems(idx);
   writeIndex(name, idx);
   return { uploaded };
 }
@@ -404,6 +422,38 @@ function patchFolder(name, folderId, body = {}) {
   idx.folders[i] = folder;
   writeIndex(name, idx);
   return { success: true, folder };
+}
+
+function deleteFolder(name, folderId) {
+  if (!libraryExists(name)) return { error: '资源库不存在', status: 404 };
+  const idx = readIndex(name);
+  if (!idx) return { error: '索引损坏', status: 500 };
+  const id = String(folderId || '');
+  const folder = (idx.folders || []).find(f => f.id === id);
+  if (!folder) return { error: '文件夹不存在', status: 404 };
+  const folderPath = normalizeRelativePath(folder.folderPath);
+  if (!folderPath) return { error: '文件夹路径无效', status: 400 };
+  const prefix = `${folderPath}/`;
+  const toRemove = idx.items.filter(it => {
+    const fn = String(it.fileName || '');
+    return fn === folderPath || fn.startsWith(prefix);
+  });
+  for (const it of toRemove) {
+    const fp = resolveResourceFile(name, it.fileName);
+    if (fp && fs.existsSync(fp)) {
+      try {
+        fs.unlinkSync(fp);
+      } catch {}
+    }
+  }
+  idx.items = idx.items.filter(it => !toRemove.some(r => r.id === it.id));
+  idx.folders = (idx.folders || []).filter(f => {
+    if (f.id === id) return false;
+    const p = String(f.folderPath || '');
+    return p !== folderPath && !p.startsWith(prefix);
+  });
+  writeIndex(name, idx);
+  return { success: true, index: idx, removedCount: toRemove.length };
 }
 
 function patchItem(name, itemId, body = {}) {
@@ -472,6 +522,7 @@ function toPublicPayload(name, opts = {}) {
   const normPath = currentPath ? normalizeRelativePath(currentPath) : '';
   const listing = listDirectoryLevel(entries, normPath || '');
   const crumbs = breadcrumbSegments(normPath || '');
+  const metaByPath = folderMetaByPath(idx.folders);
   return {
     name,
     displayName: idx.displayName || null,
@@ -482,7 +533,7 @@ function toPublicPayload(name, opts = {}) {
     browseUrl: libraryBrowseUrl(name, normPath || ''),
     archiveUrl: libraryArchiveUrl(name, normPath || ''),
     folders: listing.folders.map(f => {
-      const meta = (idx.folders || []).find(x => x.folderPath === f.path) || {};
+      const meta = metaByPath.get(f.path) || {};
       return {
         ...f,
         id: meta.id || '',
@@ -565,6 +616,7 @@ module.exports = {
   registerUploadBatch,
   patchItem,
   patchFolder,
+  deleteFolder,
   deleteItem,
   resolveResourceFile,
   itemDownloadUrl,

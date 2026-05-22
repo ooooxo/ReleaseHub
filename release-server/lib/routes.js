@@ -57,6 +57,7 @@ const {
   registerUploadBatch,
   patchItem,
   patchFolder,
+  deleteFolder,
   deleteItem,
   resolveResourceFile,
   itemDownloadUrl,
@@ -385,6 +386,12 @@ function registerRoutes(app) {
     const result = patchFolder(req.params.name, req.params.id, req.body || {});
     if (result.error) return res.status(result.status).json({ error: result.error });
     res.json({ success: true, folder: result.folder });
+  });
+
+  app.delete('/api/resources/:name/folders/:id', auth, (req, res) => {
+    const result = deleteFolder(req.params.name, req.params.id);
+    if (result.error) return res.status(result.status).json({ error: result.error });
+    res.json({ success: true, removedCount: result.removedCount });
   });
 
   app.delete('/api/resources/:name/items/:id', auth, (req, res) => {

@@ -28,24 +28,59 @@ const { normalizeRelativePath, resolveUnderRoot } = require('./path-utils');
 const resourceLibraryStorage = multer.diskStorage({
   destination: (req, file, cb) => {
     const name = req.params.name;
-    ensureLibraryFilesDir(name);
-    const rel = normalizeRelativePath(file.originalname) || normalizeRelativePath(path.basename(file.originalname));
+    if (!req._rlEnsuredRoot) {
+      ensureLibraryFilesDir(name);
+      req._rlEnsuredRoot = true;
+    }
+    const rel = resolveResourceUploadRelativePath(req, file);
     if (!rel) return cb(new Error('无效文件路径'));
     const abs = resolveUnderRoot(libraryFilesDir(name), rel);
     if (!abs) return cb(new Error('无效文件路径'));
+    const parent = path.dirname(abs);
+    if (!req._rlCreatedDirs) req._rlCreatedDirs = new Set();
     try {
-      fs.mkdirSync(path.dirname(abs), { recursive: true });
-      cb(null, path.dirname(abs));
+      if (!req._rlCreatedDirs.has(parent)) {
+        fs.mkdirSync(parent, { recursive: true });
+        req._rlCreatedDirs.add(parent);
+      }
+      cb(null, parent);
     } catch (e) {
       cb(e);
     }
   },
   filename: (req, file, cb) => {
-    const rel = normalizeRelativePath(file.originalname);
+    const rel = resolveResourceUploadRelativePath(req, file);
     if (!rel) return cb(new Error('无效文件路径'));
     cb(null, path.basename(rel));
   },
 });
+
+function parseResourceRelativePathOverrides(req) {
+  if (req._rlPathOverrides !== undefined) return req._rlPathOverrides;
+  let list = [];
+  try {
+    const raw = req.body && req.body.relativePaths;
+    if (raw) list = JSON.parse(String(raw));
+  } catch {
+    list = [];
+  }
+  req._rlPathOverrides = Array.isArray(list) ? list : [];
+  return req._rlPathOverrides;
+}
+
+function resolveResourceUploadRelativePath(req, file) {
+  if (file._rlResolvedPath) return file._rlResolvedPath;
+  const overrides = parseResourceRelativePathOverrides(req);
+  if (req._rlUploadIdx == null) req._rlUploadIdx = 0;
+  const idx = req._rlUploadIdx++;
+  const fromOverride = overrides[idx] != null ? normalizeRelativePath(String(overrides[idx])) : null;
+  const rel =
+    fromOverride ||
+    normalizeRelativePath(file.originalname) ||
+    normalizeRelativePath(path.basename(file.originalname));
+  file._rlResolvedPath = rel;
+  return rel;
+}
 
 const resourceLibraryUpload = multer({
   storage: resourceLibraryStorage,
