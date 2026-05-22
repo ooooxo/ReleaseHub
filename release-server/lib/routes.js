@@ -41,6 +41,7 @@ const {
   renderDownload404Html,
   renderDownloadPageHtml,
   renderVersionBrowserHtml,
+  renderResourceLibraryHtml,
   renderResourceItemLandingHtml,
   renderFolderBrowseHtml,
 } = require('./download-pages');
@@ -468,6 +469,25 @@ function registerRoutes(app) {
     const pathQ = req.query.path != null ? String(req.query.path) : '';
     const normPath = pathQ ? normalizeRelativePath(pathQ) : '';
     if (!libraryExists(name)) return res.status(404).type('html').send(renderDownload404Html());
+    const idx = readIndex(name);
+    if (!idx) return res.status(404).type('html').send(renderDownload404Html());
+
+    if (!normPath) {
+      const detail = toAdminDetail(name);
+      const label = detail?.displayLabel || name;
+      const items = (idx.items || []).map(it => ({
+        ...it,
+        landingHref: itemLandingUrl(name, it.fileName),
+        directHref: itemDownloadUrl(name, it.fileName),
+      }));
+      return res.type('html').send(
+        renderResourceLibraryHtml({
+          displayLabel: label,
+          description: idx.description || '',
+          items,
+        }),
+      );
+    }
 
     const payload = toPublicPayload(name, { path: normPath });
     if (!payload) return res.status(404).type('html').send(renderDownload404Html());
@@ -484,7 +504,6 @@ function registerRoutes(app) {
         archiveUrl: payload.archiveUrl,
         folders: payload.folders,
         files: payload.files.map(it => ({
-          name: it.name,
           displayName: it.displayName,
           fileName: it.fileName,
           description: it.description,

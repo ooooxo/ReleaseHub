@@ -218,15 +218,8 @@ h1{font-family:'Manrope',system-ui,sans-serif;font-size:24px;font-weight:800;mar
 .res-empty{width:100%;text-align:center;color:var(--text2);font-size:14px;padding:32px 16px;border:1px dashed var(--border);border-radius:8px}`;
 }
 
-function fileBaseName(path) {
-  const s = String(path || '');
-  const i = s.lastIndexOf('/');
-  return i >= 0 ? s.slice(i + 1) : s;
-}
-
 function buildResourceFileCardHtml(it) {
-  const baseName = it.name || fileBaseName(it.fileName);
-  const title = (it.displayName && String(it.displayName).trim()) || baseName;
+  const title = (it.displayName && String(it.displayName).trim()) || it.fileName;
   const verRaw = it.version != null && String(it.version).trim() ? String(it.version).trim() : '';
   const verHtml = verRaw ? `<span class="res-card-ver">${htmlEsc(verRaw)}</span>` : '';
   const descInner =
@@ -234,6 +227,10 @@ function buildResourceFileCardHtml(it) {
       ? `<div class="res-card-desc">${formatPlainMultiline(String(it.description).trim())}</div>`
       : '';
   const mainBlock = descInner ? `<div class="res-card-main">${descInner}</div>` : '';
+  const pathHint =
+    it.fileName && String(title) !== String(it.fileName)
+      ? `<span class="path-hint">${htmlEsc(it.fileName)}</span>`
+      : '';
   const landing = it.landingHref || it.directHref || '#';
   return `<article class="res-card">
   <header class="res-card-head">
@@ -241,6 +238,7 @@ function buildResourceFileCardHtml(it) {
       <a class="res-card-title" href="${htmlEsc(landing)}">${htmlEsc(title)}</a>
       ${verHtml}
     </div>
+    ${pathHint}
   </header>
   ${mainBlock}
   <footer class="res-card-foot">
@@ -263,7 +261,7 @@ function buildFolderCardHtml(f) {
   </header>
   <footer class="res-card-foot">
     <span class="res-sz">文件夹</span>
-    <a class="btn-dl" href="${htmlEsc(f.archiveUrl || '#')}" download rel="noopener">⬇ 下载</a>
+    <a class="btn-dl btn-dl--ghost" href="${htmlEsc(f.archiveUrl || '#')}">ZIP</a>
   </footer>
 </article>`;
 }
