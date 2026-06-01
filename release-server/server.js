@@ -39,8 +39,21 @@ app.use((req, res, next) => {
 
 app.use(express.static(path.join(__dirname, 'public')));
 
+/** Vue 管理后台 /app/:name；公开页为 /app/:app/latest 与 /app/:app/:version（多一段路径） */
+function isVueAdminAppDetailPath(pathname) {
+  const parts = pathname.split('/').filter(Boolean);
+  return parts.length === 2 && parts[0] === 'app';
+}
+
+function sendSpaIndex(res, next) {
+  const indexPath = path.join(__dirname, 'public', 'index.html');
+  if (fs.existsSync(indexPath)) res.sendFile(indexPath);
+  else next();
+}
+
 app.get('*', (req, res, next) => {
   if (req.method !== 'GET') return next();
+  if (isVueAdminAppDetailPath(req.path)) return sendSpaIndex(res, next);
   if (
     req.path.startsWith('/api') ||
     req.path.startsWith('/releases') ||
@@ -53,9 +66,7 @@ app.get('*', (req, res, next) => {
   ) {
     return next();
   }
-  const indexPath = path.join(__dirname, 'public', 'index.html');
-  if (fs.existsSync(indexPath)) res.sendFile(indexPath);
-  else next();
+  sendSpaIndex(res, next);
 });
 
 app.listen(PORT, () => {
