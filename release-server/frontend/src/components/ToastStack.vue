@@ -36,13 +36,13 @@ const { toasts } = useToast();
   max-width: 360px;
 }
 .item.success {
-  background: linear-gradient(165deg, #15251c, #1a1714);
-  color: var(--ok);
-  border-color: rgba(82, 212, 138, 0.35);
+  background: var(--surface2);
+  color: var(--green);
+  border-color: var(--green-tint);
 }
 .item.error {
-  background: linear-gradient(165deg, #2a1512, #1a1714);
-  color: #ff9a8b;
-  border-color: rgba(232, 93, 76, 0.4);
+  background: var(--surface2);
+  color: var(--danger-text);
+  border-color: var(--danger-tint);
 }
 </style>

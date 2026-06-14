@@ -1,18 +1,29 @@
 <template>
   <div class="login">
     <div class="card panel">
-      <p class="brand">Release Hub</p>
+      <div class="lbrand">
+        <span class="lbadge">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linejoin="round">
+            <rect x="3" y="3" width="18" height="18" rx="3" />
+            <path d="M3 9h18M9 21V9" />
+          </svg>
+        </span>
+        <span class="lbrand-t">Release Hub</span>
+      </div>
       <h1>管理后台</h1>
       <p class="hint">输入管理员密码登录</p>
       <form @submit.prevent="submit">
-        <input
-          v-model="password"
-          type="password"
-          class="input"
-          placeholder="密码"
-          autocomplete="current-password"
-          :disabled="loading"
-        />
+        <div>
+          <span class="field-label">密码</span>
+          <input
+            v-model="password"
+            type="password"
+            class="input"
+            placeholder="••••••••"
+            autocomplete="current-password"
+            :disabled="loading"
+          />
+        </div>
         <p v-if="err" class="err">{{ err }}</p>
         <button type="submit" class="btn btn-primary full" :disabled="loading">
           {{ loading ? '验证中…' : '登录' }}
@@ -68,37 +79,53 @@ async function submit() {
 }
 .panel {
   width: 100%;
-  max-width: 400px;
-  padding: 36px 32px;
+  max-width: 380px;
+  padding: 38px 34px;
 }
-.brand {
-  font-size: 11px;
-  font-weight: 700;
+.lbrand {
+  display: inline-flex;
+  align-items: center;
+  gap: 9px;
+  margin-bottom: 22px;
+}
+.lbadge {
+  width: 34px;
+  height: 34px;
+  border-radius: 10px;
+  background: var(--accent-tint);
   color: var(--accent);
-  letter-spacing: 0.35em;
+  display: grid;
+  place-items: center;
+}
+.lbadge svg {
+  width: 19px;
+  height: 19px;
+}
+.lbrand-t {
+  font-size: 0.72rem;
+  font-weight: 700;
+  letter-spacing: 0.22em;
   text-transform: uppercase;
-  margin: 0 0 12px;
-  text-align: center;
+  color: var(--accent-text);
 }
 h1 {
-  margin: 0 0 8px;
-  font-size: 22px;
-  text-align: center;
+  margin: 0 0 6px;
+  font-size: 1.4rem;
 }
 .hint {
-  margin: 0 0 24px;
+  margin: 0;
   color: var(--text2);
   font-size: 14px;
-  text-align: center;
 }
 form {
+  margin-top: 22px;
   display: flex;
   flex-direction: column;
   gap: 14px;
 }
 .full {
   width: 100%;
-  margin-top: 8px;
+  padding: 12px;
 }
 .err {
   margin: 0;

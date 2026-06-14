@@ -2,114 +2,122 @@
   <div class="layout-max home" id="library-grid">
     <header class="page-head">
       <h1>总览</h1>
-      <p class="sub">Tauri、通用、资源库与「临时文件」在此并列；点击卡片进入对应管理页。临时文件为单份、可定时删除的分享链。</p>
+      <p class="stat-line">
+        <b>{{ apps.length }}</b> 应用<span class="dot">·</span><b>{{ libraries.length }}</b> 资源库<span class="dot">·</span><b>{{ tempItems.length }}</b> 临时分享
+      </p>
     </header>
 
     <p v-if="loading" class="muted">加载中…</p>
 
     <template v-else>
-      <section id="temp-hub" class="section-temp" aria-label="临时传输">
-        <div class="toolbar">
-          <div class="toolbar-text">
-            <h2 class="toolbar-title">临时文件</h2>
-            <p v-if="!tempItems.length" class="section-sub">无进行中的文件。可新建一条并对外分享，到期自动删除。</p>
-          </div>
-          <div class="toolbar-actions">
-            <button type="button" class="btn btn-primary" @click="router.push('/temp-transfer')">新的临时文件</button>
-          </div>
+      <!-- 临时分享：投放格 + 流动临时卡 -->
+      <section id="temp-hub" class="section">
+        <div class="section-bar">
+          <div class="sb-l"><h2>临时分享</h2><span class="sb-count">到期自删</span></div>
         </div>
+        <div class="bento">
+          <button
+            type="button"
+            class="dropzone"
+            :class="{ drag: dzDrag }"
+            @click="newTemp"
+            @dragover.prevent="dzDrag = true"
+            @dragleave="dzDrag = false"
+            @drop.prevent="onDzDrop"
+          >
+            <svg class="dz-ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round">
+              <path d="M12 16V4M7 9l5-5 5 5" />
+              <path d="M5 16v3a1 1 0 0 0 1 1h12a1 1 0 0 0 1-1v-3" />
+            </svg>
+            <span class="dz-strong">拖文件 / 文件夹到此</span>
+            或点击新建 · 到期自删
+          </button>
 
-        <div v-if="tempItems.length" class="grid temp-grid">
           <button
             v-for="it in tempItems"
             :key="it.id"
             type="button"
-            class="app-tile card temp-tile"
+            class="temp-tile"
             @click="goTemp(it)"
           >
-            <div class="lib-tile-header temp-header">
-              <div class="lib-title-block temp-title-block">
-                <span class="name temp-filename" :title="it.originalName || '未命名'">{{
-                  it.originalName || '未命名'
-                }}</span>
+            <div class="tt-head">
+              <div class="ring" :class="{ warn: tempWarn(it) }">
+                <svg width="46" height="46" viewBox="0 0 46 46">
+                  <circle class="ring-track" cx="23" cy="23" r="19.5" />
+                  <circle
+                    class="ring-arc"
+                    cx="23"
+                    cy="23"
+                    r="19.5"
+                    stroke-dasharray="122.5"
+                    :stroke-dashoffset="ringOffset(it)"
+                    transform="rotate(-90 23 23)"
+                  />
+                </svg>
+                <span class="rtxt">{{ tempRingText(it) }}</span>
               </div>
-              <div class="temp-meta-row">
-                <span class="pkg-id temp-id" :title="it.id">#{{ it.id.slice(0, 8) }}</span>
-                <span class="temp-remain mono">{{ remLabel(it) }}</span>
+              <div class="tt-body">
+                <span class="tt-name" :title="it.originalName || '未命名'">{{ it.originalName || '未命名' }}</span>
+                <span class="tt-meta">{{ tempMeta(it) }}</span>
               </div>
             </div>
-            <div class="lib-growth temp-sheen" aria-hidden="true" />
-            <div class="lib-footer lib-footer--pillOnly">
-              <span class="lib-pill lib-pill--temp">{{
-                it.kind === 'folder'
-                  ? `临时 · 文件夹 · ${it.fileCount || 0} 个文件`
-                  : '临时 · 单文件'
-              }}</span>
+            <div class="tt-foot">
+              <span class="mini-tag" :class="{ folder: it.kind === 'folder' }">{{ it.kind === 'folder' ? '文件夹' : '单文件' }}</span>
+              <span class="tt-rem">{{ remLabel(it) }}</span>
             </div>
           </button>
         </div>
       </section>
 
-      <div class="section-gutter" role="separator" aria-hidden="true" />
-
-      <div class="toolbar">
-        <div class="toolbar-text">
-          <h2 class="toolbar-title">所有库</h2>
+      <!-- 所有库 -->
+      <section class="section">
+        <div class="section-bar">
+          <div class="sb-l"><h2>所有库</h2><span class="sb-count">{{ allItems.length }} 个</span></div>
+          <div class="sb-actions">
+            <button type="button" class="btn btn-ghost btn-sm" @click="showCreateApp = true">新建应用</button>
+            <button type="button" class="btn btn-primary btn-sm" @click="showCreateResource = true">新建资源库</button>
+          </div>
         </div>
-        <div class="toolbar-actions">
-          <button type="button" class="btn btn-primary" @click="showCreateApp = true">新建应用</button>
-          <button type="button" class="btn btn-primary" @click="showCreateResource = true">新建资源库</button>
-        </div>
-      </div>
 
-      <p v-if="!allItems.length" class="empty-hint">暂无库。可新建「应用」（多版本发版）或「资源库」（多文件无版本线）</p>
+        <p v-if="!allItems.length" class="empty-hint">暂无库。可新建「应用」（多版本发版）或「资源库」（多文件无版本线）</p>
 
-      <TransitionGroup v-else name="slide-up" tag="div" class="grid">
-        <button
-          v-for="it in allItems"
-          :key="it.key"
-          type="button"
-          class="app-tile card lib-card"
-          @click="goItem(it)"
-        >
-          <template v-if="it.kind === 'app'">
-            <div class="lib-tile-header">
-              <div class="lib-title-block">
-                <span class="name">{{ it.displayLabel || it.name }}</span>
-                <span v-if="it.displayName" class="pkg-id" aria-label="包名">{{ it.name }}</span>
+        <TransitionGroup v-else name="slide-up" tag="div" class="bento">
+          <button
+            v-for="it in allItems"
+            :key="it.key"
+            type="button"
+            class="tile"
+            @click="goItem(it)"
+          >
+            <div class="t-head">
+              <span class="ico" :class="it.kind === 'resource' ? 'is-green' : it.repoType === 'tauri' ? '' : 'is-indigo'">
+                <svg v-if="it.kind === 'resource'" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linejoin="round">
+                  <path d="M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2Z" />
+                </svg>
+                <svg v-else viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linejoin="round">
+                  <rect x="3" y="3" width="18" height="18" rx="3" />
+                  <path d="M3 9h18M9 21V9" />
+                </svg>
+              </span>
+              <div class="t-titles">
+                <span class="t-name">{{ it.displayLabel || it.name }}</span>
+                <span v-if="it.displayName" class="t-pkg">{{ it.name }}</span>
               </div>
-              <span class="lib-count">{{ it.versionCount }} 个版本</span>
+              <span class="t-count">{{ it.kind === 'app' ? `${it.versionCount} 版本` : `${it.itemCount} 文件` }}</span>
             </div>
-            <div class="lib-growth" aria-hidden="true" />
-            <div class="lib-footer">
-              <div class="lib-footer-left">
-                <span v-if="it.latestVersion" class="ver">
-                  <span class="ver-label">最新</span>
-                  <strong>{{ it.latestVersion }}</strong>
-                </span>
-                <span v-else class="ver muted2">尚未发布</span>
+            <div class="t-foot">
+              <div class="ver-block" :class="{ none: !(it.kind === 'app' && it.latestVersion) }">
+                <span class="ver-label">{{ it.kind === 'app' ? '最新' : '类型' }}</span>
+                <span class="ver-val">{{ it.kind === 'app' ? it.latestVersion || '尚未发布' : '无版本线' }}</span>
               </div>
               <span
-                class="lib-pill"
-                :class="it.repoType === 'tauri' ? 'lib-pill--tauri' : 'lib-pill--general'"
-              >{{ it.repoType === 'tauri' ? 'Tauri' : '通用' }}</span>
+                class="chip"
+                :class="it.kind === 'app' ? (it.repoType === 'tauri' ? 'tauri' : 'general') : 'resource'"
+              >{{ it.kind === 'app' ? (it.repoType === 'tauri' ? 'Tauri' : '通用') : '资源库' }}</span>
             </div>
-          </template>
-          <template v-else>
-            <div class="lib-tile-header">
-              <div class="lib-title-block">
-                <span class="name">{{ it.displayLabel || it.name }}</span>
-                <span v-if="it.displayName" class="pkg-id">{{ it.name }}</span>
-              </div>
-              <span class="lib-count">{{ it.itemCount }} 个文件</span>
-            </div>
-            <div class="lib-growth" aria-hidden="true" />
-            <div class="lib-footer lib-footer--pillOnly">
-              <span class="lib-pill lib-pill--resource">资源库</span>
-            </div>
-          </template>
-        </button>
-      </TransitionGroup>
+          </button>
+        </TransitionGroup>
+      </section>
     </template>
 
     <teleport to="body">
@@ -167,6 +175,7 @@ const libraries = ref([]);
 const tempItems = ref([]);
 const loading = ref(true);
 const tempTick = ref(0);
+const dzDrag = ref(false);
 let tempListTimer = null;
 let tempTickTimer = null;
 const showCreateApp = ref(false);
@@ -196,6 +205,46 @@ function goItem(it) {
 
 function goTemp(it) {
   router.push(`/temp-transfer/${encodeURIComponent(it.id)}`);
+}
+
+function newTemp() {
+  router.push('/temp-transfer');
+}
+
+// 就地拖拽上传为后续增强（需移植 useFolderUpload）；当前先进入创建页
+function onDzDrop() {
+  dzDrag.value = false;
+  router.push('/temp-transfer');
+}
+
+function tempSec(it) {
+  void tempTick.value;
+  const exp = it.expireAt ? new Date(it.expireAt).getTime() : 0;
+  if (!exp) return it.secondsRemaining || 0;
+  return Math.max(0, Math.floor((exp - Date.now()) / 1000));
+}
+
+function tempWarn(it) {
+  return tempSec(it) < 3600;
+}
+
+const RING_C = 122.5;
+function ringOffset(it) {
+  const frac = Math.max(0, Math.min(1, tempSec(it) / 86400));
+  return (RING_C * (1 - frac)).toFixed(1);
+}
+
+function tempRingText(it) {
+  const s = tempSec(it);
+  const h = Math.floor(s / 3600);
+  const m = Math.floor((s % 3600) / 60);
+  if (h >= 1) return `${h}h`;
+  if (m >= 1) return `${m}m`;
+  return `${s}s`;
+}
+
+function tempMeta(it) {
+  return it.kind === 'folder' ? `文件夹 · ${it.fileCount || 0} 文件` : '单文件';
 }
 
 function remLabel(it) {
@@ -314,73 +363,371 @@ onUnmounted(() => {
 
 <style scoped>
 .home {
-  padding-bottom: 32px;
+  padding-bottom: 40px;
 }
 .page-head {
-  margin-bottom: 20px;
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 16px;
+  flex-wrap: wrap;
+  margin-bottom: 6px;
 }
 h1 {
   margin: 0;
-  font-size: 26px;
-  font-family: var(--font-display, system-ui);
-  letter-spacing: 0.02em;
+  font-size: 1.9rem;
+  font-weight: 750;
+  letter-spacing: -0.02em;
 }
-.sub {
-  margin: 8px 0 0;
+.stat-line {
+  margin: 0;
+  font-size: 0.86rem;
   color: var(--text2);
-  font-size: 14px;
-  max-width: 40rem;
-  line-height: 1.5;
 }
-.toolbar {
+.stat-line b {
+  color: var(--text);
+  font-weight: 650;
+}
+.stat-line .dot {
+  margin: 0 8px;
+  color: var(--text3);
+}
+.muted {
+  color: var(--text2);
+}
+
+/* 分区 */
+.section {
+  margin-top: 4px;
+}
+.section-bar {
   display: flex;
-  flex-wrap: wrap;
   align-items: center;
   justify-content: space-between;
-  gap: 12px 16px;
-  margin-bottom: 16px;
+  gap: 12px;
+  margin: 26px 0 13px;
 }
-.toolbar-title {
+.sb-l {
+  display: flex;
+  align-items: baseline;
+  gap: 10px;
+}
+.section-bar h2 {
   margin: 0;
-  font-size: 16px;
+  font-size: 1.15rem;
   font-weight: 700;
-  color: var(--text2);
-  letter-spacing: 0.06em;
-  text-transform: uppercase;
+  letter-spacing: -0.01em;
 }
-.toolbar-actions {
+.sb-count {
+  font-size: 0.76rem;
+  color: var(--text3);
+  font-family: var(--font-mono);
+}
+.sb-actions {
   display: flex;
   flex-wrap: wrap;
   gap: 8px;
 }
 .empty-hint {
   margin: 0 0 12px;
-  font-size: 14px;
+  font-size: 0.9rem;
   color: var(--text3);
 }
-.grid {
+
+/* 流动 bento：等高卡，数量多自然换行 */
+.bento {
   display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(240px, 1fr));
-  gap: 16px;
+  grid-template-columns: repeat(auto-fill, minmax(245px, 1fr));
+  gap: 13px;
   align-content: start;
-  min-height: 0;
 }
-.app-tile {
-  padding: 20px;
-  cursor: pointer;
+
+/* 库卡 */
+.tile {
+  position: relative;
+  background: var(--surface);
   border: 1px solid var(--border);
-  background: linear-gradient(165deg, var(--surface) 0%, var(--surface2) 100%);
   border-radius: var(--radius);
-  transition: transform 0.2s, border-color 0.2s, box-shadow 0.2s;
+  padding: 17px;
+  display: flex;
+  flex-direction: column;
+  text-align: left;
+  color: inherit;
+  cursor: pointer;
+  transition: box-shadow 0.18s var(--ease), border-color 0.18s var(--ease), transform 0.18s var(--ease);
+  min-height: 148px;
 }
-.app-tile:hover {
-  border-color: rgba(232, 160, 53, 0.35);
-  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.35);
-  transform: translateY(-2px);
+.tile:hover {
+  border-color: var(--border-strong);
+  box-shadow: 0 8px 28px rgba(0, 0, 0, 0.4);
 }
-.muted {
+.tile:active {
+  transform: scale(0.985);
+}
+.ico {
+  width: 38px;
+  height: 38px;
+  border-radius: 11px;
+  background: var(--accent-tint);
+  color: var(--accent);
+  display: grid;
+  place-items: center;
+  flex: none;
+}
+.ico svg {
+  width: 20px;
+  height: 20px;
+}
+.ico.is-indigo {
+  background: var(--indigo-tint);
+  color: var(--indigo);
+}
+.ico.is-green {
+  background: var(--green-tint);
+  color: var(--green);
+}
+.t-head {
+  display: flex;
+  align-items: flex-start;
+  gap: 12px;
+  margin-bottom: 14px;
+}
+.t-titles {
+  min-width: 0;
+  flex: 1;
+}
+.t-name {
+  display: block;
+  font-size: 1.1rem;
+  font-weight: 700;
+  line-height: 1.25;
+  letter-spacing: -0.01em;
+  color: var(--text);
+  margin: 1px 0 5px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.t-pkg {
+  display: inline-block;
+  max-width: 100%;
+  font-family: var(--font-mono);
+  font-size: 10.5px;
+  letter-spacing: 0.02em;
+  color: var(--text3);
+  background: var(--inset);
+  padding: 2px 7px;
+  border-radius: var(--radius-xs);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  vertical-align: bottom;
+}
+.t-count {
+  flex: none;
+  font-size: 0.76rem;
   color: var(--text2);
+  font-weight: 500;
+  margin-top: 3px;
 }
+.t-foot {
+  display: flex;
+  align-items: flex-end;
+  justify-content: space-between;
+  gap: 10px;
+  margin-top: auto;
+  padding-top: 14px;
+}
+.ver-block .ver-label {
+  display: block;
+  font-size: 0.62rem;
+  font-weight: 650;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: var(--text3);
+  margin-bottom: 2px;
+}
+.ver-block .ver-val {
+  font-family: var(--font-mono);
+  font-size: 0.95rem;
+  font-weight: 600;
+  color: var(--accent);
+}
+.ver-block.none .ver-val {
+  color: var(--text3);
+  font-family: var(--font);
+  font-size: 0.82rem;
+}
+.chip {
+  font-size: 0.66rem;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  padding: 4px 10px;
+  border-radius: 999px;
+  line-height: 1.2;
+  flex: none;
+}
+.chip.tauri {
+  color: var(--accent);
+  background: var(--accent-tint);
+}
+.chip.general {
+  color: var(--indigo);
+  background: var(--indigo-tint);
+}
+.chip.resource {
+  color: var(--green);
+  background: var(--green-tint);
+}
+
+/* 投放格 */
+.dropzone {
+  border: 1.5px dashed var(--border-strong);
+  border-radius: var(--radius);
+  padding: 17px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  text-align: center;
+  color: var(--text2);
+  font-size: 0.8rem;
+  min-height: 148px;
+  cursor: pointer;
+  font-family: inherit;
+  background: transparent;
+  transition: border-color 0.18s var(--ease), background 0.18s var(--ease), color 0.18s var(--ease);
+}
+.dropzone:hover,
+.dropzone.drag {
+  border-color: var(--accent);
+  background: var(--accent-tint);
+  color: var(--accent);
+}
+.dz-ico {
+  width: 34px;
+  height: 34px;
+  margin-bottom: 9px;
+  color: var(--accent);
+  opacity: 0.85;
+}
+.dz-strong {
+  display: block;
+  color: var(--text);
+  font-weight: 600;
+  margin-bottom: 3px;
+}
+.dropzone.drag .dz-strong {
+  color: var(--accent);
+}
+
+/* 临时卡 */
+.temp-tile {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 16px;
+  min-height: 148px;
+  display: flex;
+  flex-direction: column;
+  text-align: left;
+  color: inherit;
+  cursor: pointer;
+  transition: box-shadow 0.18s var(--ease), border-color 0.18s var(--ease), transform 0.18s var(--ease);
+}
+.temp-tile:hover {
+  border-color: var(--border-strong);
+  box-shadow: 0 8px 28px rgba(0, 0, 0, 0.4);
+}
+.temp-tile:active {
+  transform: scale(0.985);
+}
+.tt-head {
+  display: flex;
+  align-items: center;
+  gap: 13px;
+  margin-bottom: 13px;
+}
+.ring {
+  flex: none;
+  width: 46px;
+  height: 46px;
+  position: relative;
+  color: var(--accent);
+}
+.ring.warn {
+  color: var(--amber);
+}
+.ring-track {
+  fill: none;
+  stroke: rgba(242, 243, 245, 0.1);
+  stroke-width: 3.2;
+}
+.ring-arc {
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 3.2;
+  stroke-linecap: round;
+  transition: stroke-dashoffset 0.4s var(--ease);
+}
+.rtxt {
+  position: absolute;
+  inset: 0;
+  display: grid;
+  place-items: center;
+  font-family: var(--font-mono);
+  font-size: 0.6rem;
+  font-weight: 600;
+  color: currentColor;
+  letter-spacing: -0.02em;
+}
+.tt-body {
+  min-width: 0;
+  flex: 1;
+}
+.tt-name {
+  display: block;
+  font-size: 0.94rem;
+  font-weight: 650;
+  line-height: 1.3;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.tt-meta {
+  font-size: 0.7rem;
+  color: var(--text2);
+  font-family: var(--font-mono);
+}
+.tt-foot {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  margin-top: auto;
+}
+.mini-tag {
+  flex: none;
+  font-size: 0.64rem;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  color: var(--accent);
+  background: var(--accent-tint);
+  padding: 4px 9px;
+  border-radius: 999px;
+  line-height: 1.2;
+}
+.mini-tag.folder {
+  color: var(--indigo);
+  background: var(--indigo-tint);
+}
+.tt-rem {
+  font-size: 0.72rem;
+  color: var(--text2);
+  font-family: var(--font-mono);
+}
+
+/* modal */
 .modal-back {
   position: fixed;
   inset: 0;
@@ -398,7 +745,8 @@ h1 {
 }
 .modal h2 {
   margin: 0 0 16px;
-  font-size: 18px;
+  font-size: 1.15rem;
+  font-weight: 700;
 }
 .lbl {
   display: block;
@@ -431,89 +779,5 @@ h1 {
   justify-content: flex-end;
   gap: 10px;
   margin-top: 20px;
-}
-.section-temp {
-  margin-bottom: 8px;
-}
-.section-temp .toolbar {
-  margin-bottom: 14px;
-}
-.section-sub {
-  margin: 6px 0 0;
-  font-size: 13px;
-  color: var(--text3);
-  line-height: 1.5;
-  max-width: 36rem;
-  font-weight: 400;
-  letter-spacing: 0.01em;
-}
-.temp-grid {
-  margin-top: 4px;
-  grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
-}
-.temp-header {
-  flex-direction: column;
-  align-items: stretch;
-  gap: 8px;
-}
-.temp-title-block {
-  min-width: 0;
-}
-.temp-meta-row {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  justify-content: space-between;
-  gap: 6px 10px;
-}
-.temp-tile {
-  text-align: left;
-  background: linear-gradient(168deg, rgba(20, 17, 14, 0.98) 0%, rgba(8, 7, 6, 0.99) 100%);
-  border-color: rgba(232, 160, 53, 0.22) !important;
-  box-shadow: 0 12px 36px rgba(0, 0, 0, 0.35);
-}
-.temp-tile:hover {
-  border-color: rgba(232, 160, 53, 0.45) !important;
-  box-shadow: 0 16px 44px rgba(0, 0, 0, 0.45), 0 0 0 1px rgba(232, 160, 53, 0.12);
-}
-.temp-filename {
-  display: -webkit-box;
-  -webkit-line-clamp: 2;
-  -webkit-box-orient: vertical;
-  overflow: hidden;
-  overflow-wrap: anywhere;
-  line-height: 1.45;
-}
-.temp-id {
-  font-size: 10px;
-  letter-spacing: 0.1em;
-  opacity: 0.7;
-}
-.temp-remain {
-  font-size: 12px;
-  color: #e8a035;
-  line-height: 1.35;
-  flex-shrink: 0;
-  margin-left: auto;
-}
-.lib-pill--temp {
-  background: linear-gradient(90deg, rgba(232, 160, 53, 0.18) 0%, rgba(60, 45, 20, 0.5) 100%);
-  color: #f0c978;
-  border: 1px solid rgba(232, 160, 53, 0.25);
-}
-.temp-sheen {
-  background: linear-gradient(105deg, transparent 0%, rgba(232, 160, 53, 0.04) 40%, transparent 80%);
-  min-height: 6px;
-  margin: 4px 0 8px;
-  border-radius: 4px;
-}
-.section-gutter {
-  height: 1px;
-  background: linear-gradient(90deg, transparent, var(--border), transparent);
-  margin: 22px 0 20px;
-  opacity: 0.85;
-}
-.mono {
-  font-family: var(--font-path, 'IBM Plex Mono'), ui-monospace, monospace;
 }
 </style>

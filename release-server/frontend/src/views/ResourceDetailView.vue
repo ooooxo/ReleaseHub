@@ -1,73 +1,39 @@
 <template>
   <div class="layout-max">
-    <header class="top">
+    <div class="appbar" :class="{ 'section-dim': pageLoading }">
       <button
         type="button"
-        class="btn btn-ghost"
+        class="back"
+        title="返回总览"
         @click="router.push({ path: '/', hash: '#library-grid' })"
-      >← 总览</button>
-      <div class="title-block">
-        <div class="titles">
-          <h1>
-            {{ displayLabel }}
-            <span v-if="pageLoading" class="loading-pill">载入中…</span>
-          </h1>
-          <p class="pkg-sub">标识 <code>{{ libraryName }}</code></p>
-        </div>
-        <span class="badge-type">resource</span>
+      >
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M15 18l-6-6 6-6" /></svg>
+      </button>
+      <div class="ab-titles">
+        <h1>
+          {{ displayLabel }}
+          <span class="chip resource">资源库</span>
+          <span v-if="pageLoading" class="loading-pill">载入中…</span>
+        </h1>
+        <span class="pkg">标识 {{ libraryName }}<template v-if="items.length"> · {{ items.length }} 文件</template></span>
       </div>
-      <div class="actions">
-        <button type="button" class="btn btn-ghost danger" @click="confirmDeleteLibrary">删除资源库</button>
-      </div>
-    </header>
-
-    <section class="card meta-block" :class="{ 'section-dim': pageLoading }">
-      <h2>资源库信息</h2>
-      <label class="lbl">标识（修改后公开 URL 中的路径段会变化）</label>
-      <div class="row-input">
-        <input
-          v-model="idEdit"
-          class="input code"
-          spellcheck="false"
-          :placeholder="libraryName"
-          :disabled="pageLoading"
-        />
-        <button
-          type="button"
-          class="btn btn-primary btn-sm"
-          :disabled="savingId || pageLoading || idEdit.trim() === libraryName || !idEdit.trim()"
-          @click="saveRename"
-        >
-          保存标识
+      <div class="ab-actions">
+        <a
+          v-if="publicPageUrl"
+          class="btn btn-ghost btn-sm"
+          :href="publicPageUrl"
+          target="_blank"
+          rel="noopener noreferrer"
+        >打开公开页</a>
+        <button type="button" class="btn btn-primary btn-sm" :disabled="pageLoading" @click="scrollToUpload">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M12 5v14M5 12h14" /></svg>
+          上传文件
         </button>
       </div>
-      <label class="lbl">展示名（可选）</label>
-      <input v-model="displayNameEdit" class="input" :placeholder="libraryName" :disabled="pageLoading" />
-      <label class="lbl">资源库简介（可选，显示在公开下载页顶部）</label>
-      <textarea
-        v-model="descriptionEdit"
-        class="textarea"
-        rows="4"
-        placeholder="支持换行"
-        :disabled="pageLoading"
-      />
-      <div class="row-btns">
-        <button type="button" class="btn btn-primary" :disabled="savingMeta || pageLoading" @click="saveMeta">
-          保存名称与简介
-        </button>
-      </div>
-    </section>
+    </div>
 
-    <section v-if="publicBase" class="card api-block" :class="{ 'section-dim': pageLoading }">
-      <h2>对外链接</h2>
-      <ShareLinkRow v-if="publicPageUrl" label="公开浏览页" :url="publicPageUrl" />
-      <ShareLinkRow v-if="publicArchiveRootUrl" label="根目录 ZIP 直链" :url="publicArchiveRootUrl" />
-      <ShareLinkRow v-if="publicJsonUrl" label="JSON" :url="publicJsonUrl" />
-      <p class="hint sm no-mt">公开页为卡片网格展示简介与版本；含子目录时可进入文件夹浏览或打包 ZIP。</p>
-    </section>
-
-    <section class="card upload-block" :class="{ 'section-dim': pageLoading }">
-      <h2>上传文件</h2>
+    <!-- 全宽投放区 -->
+    <div ref="uploadRef" class="dz-wrap" :class="{ 'section-dim': pageLoading }">
       <FolderAwareDropzone
         :disabled="pageLoading || uploading"
         :hint="
@@ -83,98 +49,231 @@
         </div>
         <span class="prog-txt">{{ uploadPct }}%</span>
       </div>
-      <div v-else-if="uploadPct === -1" class="prog indet">上传中（无法计算进度）…</div>
-    </section>
+      <div v-else-if="uploadPct === -1" class="prog-txt indet">上传中（无法计算进度）…</div>
+    </div>
 
-    <section v-if="items.length" class="card items-section" :class="{ 'section-dim': pageLoading }">
-      <div class="items-section-head">
-        <h2>资源文件</h2>
-        <button
-          v-if="hasNestedPaths"
-          type="button"
-          class="btn btn-sm btn-ghost"
-          @click="folderBrowse = !folderBrowse"
-        >
-          {{ folderBrowse ? '显示全部卡片' : '按文件夹浏览' }}
-        </button>
-      </div>
-      <template v-if="folderBrowse && hasNestedPaths">
-      <nav class="file-crumbs" aria-label="路径">
-        <button
-          v-for="(c, i) in browseCrumbs"
-          :key="c.path"
-          type="button"
-          class="crumb-btn"
-          :class="{ current: i === browseCrumbs.length - 1 }"
-          @click="browsePath = c.path"
-        >
-          {{ c.label }}
-        </button>
-      </nav>
-      <p v-if="browseArchiveUrl" class="hint sm">
-        <button type="button" class="btn btn-sm btn-ghost" @click="copy(browseArchiveUrl)">复制当前目录 ZIP 直链</button>
-      </p>
-      <ul v-if="browseFolders.length" class="folder-list">
-        <li v-for="f in browseFolders" :key="f.path">
-          <button type="button" class="folder-row" @click="browsePath = f.path">📁 {{ f.name }}</button>
-        </li>
-      </ul>
-      </template>
-      <transition-group name="res-card" tag="div" class="items-grid">
-      <article v-for="it in displayItems" :key="it.id" class="card item-card">
-        <header class="item-head">
-          <div class="item-title-block">
-            <div class="item-title-row">
-              <span class="item-title">{{ itemCardTitle(it) }}</span>
-              <span v-if="itemEdits[it.id]?.version?.trim()" class="item-ver">{{ itemEdits[it.id].version.trim() }}</span>
-            </div>
-            <span
-              v-if="itemCardSubtitle(it)"
-              class="item-path"
-              :class="{ 'path-font': folderBrowse && hasNestedPaths }"
-              :title="it.fileName"
-            >{{ itemCardSubtitle(it) }}</span>
-          </div>
-          <span class="sz">{{ fmtSize(it.size) }}</span>
-        </header>
-        <div class="item-body">
-          <label class="lbl">显示名（可选）</label>
-          <input v-model="itemEdits[it.id].displayName" class="input sm" :disabled="pageLoading" />
-          <label class="lbl">版本号（可选，公开页显示在名称右侧）</label>
-          <input v-model="itemEdits[it.id].version" class="input sm" :disabled="pageLoading" placeholder="如 v1.2.0" />
-          <label class="lbl">简介（可选）</label>
-          <textarea v-model="itemEdits[it.id].description" class="textarea sm" rows="2" :disabled="pageLoading" />
+    <!-- 库设置：折叠区，位于投放区下方、文件区上方 -->
+    <div class="adv" :class="{ open: advOpen, 'section-dim': pageLoading }" style="margin-top: 0; margin-bottom: 18px">
+      <div class="adv-head" @click="advOpen = !advOpen">
+        <span class="adv-ico">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7"><circle cx="12" cy="12" r="3" /><path d="M19 12a7 7 0 0 0-.1-1l2-1.5-2-3.5-2.4 1a7 7 0 0 0-1.7-1l-.4-2.5h-4l-.4 2.5a7 7 0 0 0-1.7 1l-2.4-1-2 3.5 2 1.5a7 7 0 0 0 0 2l-2 1.5 2 3.5 2.4-1a7 7 0 0 0 1.7 1l.4 2.5h4l.4-2.5a7 7 0 0 0 1.7-1l2.4 1 2-3.5-2-1.5a7 7 0 0 0 .1-1z" /></svg>
+        </span>
+        <div class="adv-t">
+          <h3>库设置</h3>
+          <p>标识 / 展示名 / 简介 / 删除库 — 默认收起</p>
         </div>
-        <div class="item-actions">
-          <button
-            type="button"
-            class="btn btn-primary btn-sm"
-            :disabled="savingItem === it.id || deletingItem === it.id || pageLoading"
-            @click="saveItem(it.id)"
-          >
-            保存此项
+        <svg class="chev" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M6 9l6 6 6-6" /></svg>
+      </div>
+      <div class="adv-body">
+        <div>
+          <span class="field-label">标识（修改后公开 URL 中的路径段会变化）</span>
+          <div class="row-input">
+            <input
+              v-model="idEdit"
+              class="input code"
+              spellcheck="false"
+              :placeholder="libraryName"
+              :disabled="pageLoading"
+            />
+            <button
+              type="button"
+              class="btn btn-primary btn-sm"
+              :disabled="savingId || pageLoading || idEdit.trim() === libraryName || !idEdit.trim()"
+              @click="saveRename"
+            >
+              保存标识
+            </button>
+          </div>
+        </div>
+        <div>
+          <span class="field-label">展示名（可选）</span>
+          <input v-model="displayNameEdit" class="input" :placeholder="libraryName" :disabled="pageLoading" />
+        </div>
+        <div>
+          <span class="field-label">资源库简介（可选，显示在公开下载页顶部）</span>
+          <textarea
+            v-model="descriptionEdit"
+            class="textarea"
+            rows="4"
+            placeholder="支持换行"
+            :disabled="pageLoading"
+          />
+        </div>
+        <div class="vactions">
+          <button type="button" class="btn btn-primary btn-sm" :disabled="savingMeta || pageLoading" @click="saveMeta">
+            保存名称与简介
           </button>
-          <button type="button" class="btn btn-sm btn-ghost" @click="copy(itemLanding(it))">复制说明页</button>
-          <button type="button" class="btn btn-sm btn-ghost" @click="copy(itemDirect(it))">复制直链</button>
+        </div>
+
+        <template v-if="publicBase">
+          <div class="settings-sep">对外接口</div>
+          <ShareLinkRow v-if="publicPageUrl" label="公开浏览页" :url="publicPageUrl" />
+          <ShareLinkRow v-if="publicArchiveRootUrl" label="根目录 ZIP 直链" :url="publicArchiveRootUrl" />
+          <ShareLinkRow v-if="publicJsonUrl" label="JSON" :url="publicJsonUrl" />
+          <p class="settings-note">公开页为卡片网格展示简介与版本；含子目录时可进入文件夹浏览或打包 ZIP。</p>
+        </template>
+
+        <div class="danger-zone">
+          <span class="dz-t"><b>删除资源库</b> — 连同全部文件不可恢复</span>
+          <button type="button" class="btn btn-danger btn-sm" @click="confirmDeleteLibrary">删除资源库…</button>
+        </div>
+      </div>
+    </div>
+
+    <template v-if="items.length">
+      <div class="section-bar" :class="{ 'section-dim': pageLoading }">
+        <div class="sb-l">
+          <h2>文件</h2>
+          <span class="sb-count">{{ displayItems.length }} 个</span>
+        </div>
+        <div v-if="hasNestedPaths" class="sb-actions">
           <button
-            v-if="itemInSubfolder(it)"
             type="button"
             class="btn btn-sm btn-ghost"
-            @click="copy(itemFolderZip(it))"
-          >复制所在文件夹 ZIP</button>
-          <button
-            type="button"
-            class="btn btn-sm btn-ghost danger"
-            :disabled="deletingItem === it.id || savingItem === it.id || pageLoading"
-            @click="confirmDeleteItem(it)"
+            @click="folderBrowse = !folderBrowse"
           >
-            删除
+            {{ folderBrowse ? '显示全部卡片' : '按文件夹浏览' }}
           </button>
         </div>
-      </article>
+      </div>
+
+      <template v-if="folderBrowse && hasNestedPaths">
+        <nav class="crumbs" aria-label="路径">
+          <button
+            v-for="(c, i) in browseCrumbs"
+            :key="c.path"
+            type="button"
+            class="crumb"
+            :class="{ current: i === browseCrumbs.length - 1 }"
+            @click="browsePath = c.path"
+          >
+            {{ c.label }}
+          </button>
+          <button
+            v-if="browseArchiveUrl"
+            type="button"
+            class="crumb-zip"
+            @click="copy(browseArchiveUrl)"
+          >复制当前目录 ZIP 直链</button>
+        </nav>
+        <ul v-if="browseFolders.length" class="folder-list">
+          <li v-for="f in browseFolders" :key="f.path">
+            <button type="button" class="folder-row" @click="browsePath = f.path">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z" /></svg>
+              {{ f.name }}
+            </button>
+          </li>
+        </ul>
+      </template>
+
+      <transition-group name="res-card" tag="div" class="bento" :class="{ 'section-dim': pageLoading }">
+        <div
+          v-for="it in displayItems"
+          :key="it.id"
+          class="fcard"
+          :class="{ open: openId === it.id }"
+          @click="toggleOpen(it.id)"
+        >
+          <div class="fc-head">
+            <span class="ico is-green">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7"><path d="M14 3v5h5M14 3l5 5v11a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2z" /></svg>
+            </span>
+            <div class="fc-titles">
+              <span
+                class="fc-name"
+                :class="{ 'path-font': folderBrowse && hasNestedPaths }"
+                :title="it.fileName"
+              >{{ itemCardTitle(it) }}</span>
+              <span v-if="itemEdits[it.id]?.version?.trim()" class="fc-ver">{{ itemEdits[it.id].version.trim() }}</span>
+            </div>
+            <span class="fc-size">{{ fmtSize(it.size) }}</span>
+          </div>
+          <p v-if="itemCardSubtitle(it) || itemEdits[it.id]?.description?.trim()" class="fc-desc">
+            {{ itemEdits[it.id]?.description?.trim() || itemCardSubtitle(it) }}
+          </p>
+          <div class="fc-foot">
+            <a
+              class="btn btn-primary btn-sm"
+              :href="itemDirect(it)"
+              target="_blank"
+              rel="noopener noreferrer"
+              @click.stop
+            >
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4M7 10l5 5 5-5M12 15V3" /></svg>
+              下载
+            </a>
+            <button type="button" class="btn btn-ghost btn-sm" @click.stop="copy(itemDirect(it))">复制直链</button>
+            <span class="fc-hint">
+              {{ openId === it.id ? '收起' : '展开' }}
+              <svg class="chev" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M6 9l6 6 6-6" /></svg>
+            </span>
+          </div>
+
+          <div class="fc-detail" @click.stop>
+            <div class="fc-col">
+              <h4>文件信息</h4>
+              <ul class="kv">
+                <li><span class="k">大小</span><span class="v mono">{{ fmtSize(it.size) }}</span></li>
+                <li v-if="itemEdits[it.id]?.version?.trim()"><span class="k">版本</span><span class="v mono">{{ itemEdits[it.id].version.trim() }}</span></li>
+                <li><span class="k">路径</span><span class="v mono">{{ it.fileName }}</span></li>
+              </ul>
+              <div class="fc-actions">
+                <a
+                  class="btn btn-ghost btn-sm"
+                  :href="itemDirect(it)"
+                  target="_blank"
+                  rel="noopener noreferrer"
+                >下载</a>
+                <button type="button" class="btn btn-ghost btn-sm" @click="copy(itemLanding(it))">复制说明页</button>
+                <button type="button" class="btn btn-ghost btn-sm" @click="copy(itemDirect(it))">复制直链</button>
+                <button
+                  v-if="itemInSubfolder(it)"
+                  type="button"
+                  class="btn btn-ghost btn-sm"
+                  @click="copy(itemFolderZip(it))"
+                >复制所在文件夹 ZIP</button>
+              </div>
+            </div>
+            <div class="fc-col">
+              <h4>编辑</h4>
+              <div class="fc-form">
+                <div>
+                  <span class="field-label">显示名（可选）</span>
+                  <input v-model="itemEdits[it.id].displayName" class="input" :disabled="pageLoading" />
+                </div>
+                <div>
+                  <span class="field-label">版本号（可选，公开页显示在名称右侧）</span>
+                  <input v-model="itemEdits[it.id].version" class="input" :disabled="pageLoading" placeholder="如 v1.2.0" />
+                </div>
+                <div>
+                  <span class="field-label">简介（可选）</span>
+                  <textarea v-model="itemEdits[it.id].description" class="textarea" rows="3" :disabled="pageLoading" />
+                </div>
+                <div class="fc-actions">
+                  <button
+                    type="button"
+                    class="btn btn-primary btn-sm"
+                    :disabled="savingItem === it.id || deletingItem === it.id || pageLoading"
+                    @click="saveItem(it.id)"
+                  >
+                    保存
+                  </button>
+                  <button
+                    type="button"
+                    class="btn btn-danger btn-sm"
+                    :disabled="deletingItem === it.id || savingItem === it.id || pageLoading"
+                    @click="confirmDeleteItem(it)"
+                  >
+                    删除
+                  </button>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
       </transition-group>
-    </section>
-    <p v-if="!pageLoading && !items.length" class="muted empty-hint">暂无文件，请上传。</p>
+    </template>
+    <p v-if="!pageLoading && !items.length" class="empty-hint">暂无文件，请上传。</p>
   </div>
 </template>
 
@@ -210,6 +309,17 @@ const itemEdits = reactive({});
 const uploadPct = ref(null);
 const browsePath = ref('');
 const folderBrowse = ref(false);
+const advOpen = ref(false);
+const openId = ref(null);
+const uploadRef = ref(null);
+
+function toggleOpen(id) {
+  openId.value = openId.value === id ? null : id;
+}
+
+function scrollToUpload() {
+  uploadRef.value?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+}
 
 const displayLabel = computed(() => displayNameEdit.value.trim() || libraryName.value);
 
@@ -556,345 +666,317 @@ watch(
 </script>
 
 <style scoped>
-.top {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  gap: 12px;
-  margin-bottom: 22px;
-}
-.title-block {
-  flex: 1;
-  min-width: 120px;
-  display: flex;
-  align-items: center;
-  gap: 12px;
-}
-h1 {
-  margin: 0;
-  font-size: 24px;
-  display: flex;
-  align-items: center;
-  flex-wrap: wrap;
-  gap: 10px;
-}
-.loading-pill {
-  font-size: 11px;
-  font-weight: 600;
-  color: var(--accent);
-  border: 1px solid rgba(232, 160, 53, 0.35);
-  padding: 3px 10px;
-  border-radius: 999px;
-  letter-spacing: 0.04em;
-}
-.pkg-sub {
-  margin: 6px 0 0;
-  font-size: 13px;
-  color: var(--text2);
-}
-.badge-type {
-  font-size: 11px;
-  text-transform: uppercase;
-  letter-spacing: 0.08em;
-  color: var(--text3);
-  border: 1px solid var(--border);
-  padding: 4px 8px;
-  border-radius: 4px;
-}
-.actions {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 8px;
-}
-.danger {
-  color: #ff9a8b;
-}
-.meta-block,
-.api-block,
-.upload-block {
-  padding: 20px;
-  margin-bottom: 20px;
-}
 .section-dim {
   opacity: 0.55;
   pointer-events: none;
 }
-.meta-block h2,
-.api-block h2,
-.upload-block h2 {
-  margin: 0 0 12px;
-  font-size: 16px;
+.loading-pill {
+  font-size: 0.66rem;
+  font-weight: 600;
+  color: var(--accent);
+  background: var(--accent-tint);
+  padding: 3px 9px;
+  border-radius: 999px;
+  letter-spacing: 0.04em;
 }
-.lbl {
-  display: block;
-  font-size: 12px;
-  color: var(--text2);
-  margin-bottom: 6px;
+
+/* 危险按钮（页面级，token 化） */
+.btn-danger {
+  color: var(--danger);
+  background: transparent;
+  border-color: var(--border-strong);
 }
-.row-input {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 10px;
-  align-items: center;
-  margin-bottom: 14px;
+.btn-danger:hover:not(:disabled) {
+  color: var(--danger);
+  border-color: var(--danger);
+  background: rgba(232, 98, 79, 0.1);
 }
-.row-input .input {
-  flex: 1;
-  min-width: 200px;
-}
-.textarea {
+
+/* 全宽投放区 */
+.dz-wrap {
   width: 100%;
-  padding: 12px;
-  border: 1px solid var(--border);
-  border-radius: var(--radius-sm);
-  background: var(--surface);
-  color: var(--text);
-  font-family: inherit;
-  font-size: 14px;
-  resize: vertical;
-  margin-bottom: 10px;
+  margin-bottom: 16px;
 }
-.textarea.sm {
-  font-size: 13px;
-}
-.input.sm {
-  margin-bottom: 8px;
-}
-.row-btns {
+.dz-wrap :deep(.drop-zone) {
+  width: 100%;
+  border: 1.5px dashed var(--border-strong);
+  border-radius: var(--radius);
+  padding: 26px 17px;
   display: flex;
-  flex-wrap: wrap;
-  gap: 8px;
-  margin-top: 8px;
-}
-.hint {
-  margin: 0 0 14px;
-  font-size: 13px;
-  color: var(--text2);
-}
-.hint.sm {
-  font-size: 12px;
-  margin-top: 10px;
-}
-.hint.no-mt {
-  margin-top: 0;
-}
-.drop-zone {
-  padding: 22px;
-  border: 1px dashed rgba(232, 160, 53, 0.35);
-  border-radius: var(--radius-sm);
+  align-items: center;
+  justify-content: center;
   text-align: center;
-  cursor: pointer;
-  font-size: 13px;
+  min-height: 104px;
   color: var(--text2);
-  transition: background 0.2s, border-color 0.2s, opacity 0.2s;
+  font-size: 0.84rem;
+  cursor: pointer;
+  background: transparent;
+  transition: border-color 0.18s var(--ease), background 0.18s var(--ease), color 0.18s var(--ease);
 }
-.drop-zone.drag {
-  background: rgba(232, 160, 53, 0.08);
+.dz-wrap :deep(.drop-zone:hover),
+.dz-wrap :deep(.drop-zone.drag) {
   border-color: var(--accent);
+  background: var(--accent-tint);
+  color: var(--accent);
 }
-.drop-zone.disabled {
+.dz-wrap :deep(.drop-zone.disabled) {
   cursor: not-allowed;
   opacity: 0.65;
 }
-.hidden-input {
-  display: none;
+.prog-txt.indet {
+  margin-top: 10px;
 }
-.prog {
-  margin-top: 12px;
-}
-.prog-bar {
-  height: 6px;
-  background: rgba(255, 255, 255, 0.06);
-  border-radius: 3px;
-  overflow: hidden;
-}
-.prog-fill {
-  height: 100%;
-  background: linear-gradient(90deg, var(--accent-dim), var(--accent));
-}
-.prog-txt {
-  font-size: 11px;
-  color: var(--text3);
+
+/* 库设置内分隔 */
+.settings-sep {
   margin-top: 4px;
-}
-.prog.indet {
-  font-size: 12px;
+  font-size: 0.66rem;
+  font-weight: 650;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
   color: var(--text3);
-  margin-top: 8px;
 }
-.items-section {
-  padding: 20px;
-  margin-bottom: 20px;
+.settings-note {
+  margin: 4px 0 0;
+  font-size: 0.74rem;
+  color: var(--text3);
+  line-height: 1.5;
 }
-.items-section-head {
+
+/* 文件夹浏览：面包屑 mono chip 行 + 文件夹列表 */
+.crumbs {
   display: flex;
   flex-wrap: wrap;
   align-items: center;
-  justify-content: space-between;
-  gap: 10px;
-  margin-bottom: 14px;
-}
-.items-section-head h2 {
-  margin: 0;
-  font-size: 16px;
-}
-.file-crumbs {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 4px;
+  gap: 6px;
   margin-bottom: 12px;
-  font-size: 13px;
 }
-.crumb-btn {
-  background: none;
-  border: none;
+.crumb {
+  font-family: var(--font-mono);
+  font-size: 0.72rem;
   color: var(--accent);
+  background: var(--accent-tint);
+  border: 1px solid transparent;
+  border-radius: var(--radius-xs);
+  padding: 3px 9px;
   cursor: pointer;
-  padding: 2px 4px;
-  font: inherit;
+  transition: border-color 0.18s var(--ease);
 }
-.crumb-btn.current {
-  color: var(--text);
+.crumb:hover {
+  border-color: var(--accent);
+}
+.crumb.current {
+  color: var(--text2);
+  background: var(--inset);
   cursor: default;
+}
+.crumb-zip {
+  margin-left: auto;
+  font-size: 0.72rem;
+  color: var(--text3);
+  background: none;
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius-xs);
+  padding: 3px 10px;
+  cursor: pointer;
+  transition: color 0.18s var(--ease), border-color 0.18s var(--ease);
+}
+.crumb-zip:hover {
+  color: var(--accent);
+  border-color: var(--accent);
 }
 .folder-list {
   list-style: none;
-  margin: 0 0 14px;
-  padding: 0;
-}
-.folder-row {
-  width: 100%;
-  text-align: left;
-  background: rgba(232, 160, 53, 0.06);
-  border: 1px solid var(--border);
-  border-radius: var(--radius-sm);
-  padding: 10px 12px;
-  color: var(--text);
-  cursor: pointer;
-  font-size: 14px;
-  margin-bottom: 6px;
-}
-.folder-row:hover {
-  border-color: rgba(232, 160, 53, 0.35);
-}
-.path-font {
-  font-family: var(--font-path, 'IBM Plex Mono'), ui-monospace, monospace;
-  font-size: 12px;
-  overflow-wrap: anywhere;
-}
-.items-grid {
-  display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
-  gap: 16px;
-  margin-bottom: 24px;
-}
-.item-card {
+  margin: 0 0 16px;
   padding: 0;
   display: flex;
   flex-direction: column;
-  min-height: 100%;
-  border: 1px solid var(--border);
-  background: linear-gradient(168deg, #14110e 0%, #0e0c0a 52%, #12100e 100%);
-  box-shadow:
-    0 20px 50px rgba(0, 0, 0, 0.42),
-    inset 0 1px 0 rgba(255, 255, 255, 0.04);
-  overflow: hidden;
-  transition:
-    border-color 0.22s ease,
-    box-shadow 0.22s ease,
-    transform 0.22s ease;
+  gap: 6px;
 }
-.item-card:hover {
-  border-color: rgba(232, 160, 53, 0.38);
-  box-shadow:
-    0 26px 56px rgba(0, 0, 0, 0.48),
-    0 0 0 1px rgba(232, 160, 53, 0.12),
-    inset 0 1px 0 rgba(255, 255, 255, 0.06);
-  transform: translateY(-2px);
-}
-.item-head {
+.folder-row {
+  width: 100%;
   display: flex;
-  flex-wrap: wrap;
-  align-items: flex-start;
-  justify-content: space-between;
-  gap: 10px 14px;
-  padding: 15px 16px 14px;
-  border-bottom: 1px solid var(--border);
+  align-items: center;
+  gap: 9px;
+  text-align: left;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  padding: 10px 13px;
+  color: var(--text);
+  cursor: pointer;
+  font-size: 0.86rem;
+  font-family: inherit;
+  transition: border-color 0.18s var(--ease), background 0.18s var(--ease);
 }
-.item-title-block {
+.folder-row:hover {
+  border-color: var(--border-strong);
+  background: var(--surface2);
+}
+.folder-row svg {
+  width: 17px;
+  height: 17px;
+  color: var(--accent);
+  flex: none;
+}
+
+/* 文件卡：折叠 / 展开两态（参考蓝本 .fcard） */
+.fcard {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 16px;
+  display: flex;
+  flex-direction: column;
+  cursor: pointer;
+  transition: box-shadow 0.18s var(--ease), border-color 0.18s var(--ease);
+}
+.fcard:hover {
+  border-color: var(--border-strong);
+  box-shadow: 0 8px 28px rgba(0, 0, 0, 0.4);
+}
+.fcard.open {
+  border-color: var(--border-strong);
+  grid-column: 1 / -1;
+}
+.fc-head {
+  display: flex;
+  align-items: flex-start;
+  gap: 12px;
+}
+.fc-titles {
   flex: 1;
   min-width: 0;
 }
-.item-title-row {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: baseline;
-  justify-content: space-between;
-  gap: 8px 12px;
-}
-.item-title {
-  font-weight: 700;
-  font-size: 17px;
-  line-height: 1.3;
-  color: var(--accent);
-  letter-spacing: -0.015em;
-  word-break: break-word;
-}
-.item-ver {
-  font-family: var(--font-path);
-  font-size: 12px;
-  font-weight: 600;
-  color: var(--text3);
-  letter-spacing: 0.06em;
-  flex-shrink: 0;
-}
-.item-path {
+.fc-name {
   display: block;
-  margin-top: 6px;
-  font-size: 11px;
+  font-size: 1rem;
+  font-weight: 700;
+  letter-spacing: -0.01em;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.fc-name.path-font {
+  font-family: var(--font-mono);
+  font-size: 0.84rem;
+  font-weight: 600;
+}
+.fc-ver {
+  display: inline-block;
+  font-family: var(--font-mono);
+  font-size: 0.64rem;
+  font-weight: 600;
+  color: var(--accent);
+  background: var(--accent-tint);
+  padding: 2px 7px;
+  border-radius: 5px;
+  margin-top: 5px;
+}
+.fc-size {
+  flex: none;
+  font-size: 0.72rem;
   color: var(--text3);
+  font-family: var(--font-mono);
+  font-variant-numeric: tabular-nums;
+  margin-top: 3px;
+}
+.fc-desc {
+  font-size: 0.78rem;
+  color: var(--text2);
+  margin: 11px 0 0;
+  line-height: 1.55;
+  display: -webkit-box;
+  -webkit-line-clamp: 1;
+  line-clamp: 1;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+.fcard.open .fc-desc {
+  display: none;
+}
+.fc-foot {
+  display: flex;
+  gap: 8px;
+  margin-top: 13px;
+  align-items: center;
+}
+.fc-foot .btn svg {
+  width: 15px;
+  height: 15px;
+}
+.fc-hint {
+  font-size: 0.66rem;
+  color: var(--text3);
+  margin-left: auto;
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+}
+.fcard.open .fc-hint {
+  color: var(--accent);
+}
+.fc-hint .chev {
+  width: 14px;
+  height: 14px;
+  transition: transform 0.2s var(--ease);
+}
+.fcard.open .fc-hint .chev {
+  transform: rotate(180deg);
+}
+
+/* 展开全宽：左右两栏 */
+.fc-detail {
+  display: none;
+  margin-top: 15px;
+  padding-top: 16px;
+  border-top: 1px solid var(--border);
+  grid-template-columns: 1.1fr 1fr;
+  gap: 22px;
+  cursor: default;
+}
+.fcard.open .fc-detail {
+  display: grid;
+}
+.fc-col h4 {
+  margin: 0 0 11px;
+  font-size: 0.66rem;
+  font-weight: 650;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--text3);
+}
+.fc-col .kv .v.mono {
   overflow-wrap: anywhere;
 }
-.sz {
-  font-family: var(--font-path);
-  font-size: 13px;
-  font-weight: 600;
-  color: var(--text);
-  flex-shrink: 0;
-  opacity: 0.92;
-}
-.item-body {
-  padding: 12px 16px 14px;
-  flex: 1;
-}
-.item-body .textarea.sm {
-  font-family: 'Fraunces', 'Noto Serif SC', 'Source Han Serif CN', serif;
-  font-size: 14px;
-  line-height: 1.65;
-  color: #e3ddd4;
-}
-.item-actions {
+.fc-actions {
   display: flex;
   flex-wrap: wrap;
   gap: 8px;
-  padding: 11px 16px 12px;
-  border-top: 1px solid var(--border);
-  background: rgba(0, 0, 0, 0.18);
-  margin-top: auto;
+  margin-top: 14px;
 }
-.muted {
-  color: var(--text2);
+.fc-form {
+  display: flex;
+  flex-direction: column;
+  gap: 11px;
 }
-.empty-hint {
-  padding: 24px;
-  text-align: center;
+@media (max-width: 680px) {
+  .fc-detail {
+    grid-template-columns: 1fr;
+  }
 }
 
+.empty-hint {
+  padding: 28px;
+  text-align: center;
+  color: var(--text2);
+  font-size: 0.86rem;
+}
+
+/* 列表过渡 */
 .res-card-enter-active,
 .res-card-leave-active {
-  transition:
-    opacity 0.22s ease,
-    transform 0.22s ease;
+  transition: opacity 0.22s var(--ease), transform 0.22s var(--ease);
 }
 .res-card-enter-from {
   opacity: 0;
@@ -905,6 +987,6 @@ h1 {
   transform: scale(0.98);
 }
 .res-card-move {
-  transition: transform 0.22s ease;
+  transition: transform 0.22s var(--ease);
 }
 </style>

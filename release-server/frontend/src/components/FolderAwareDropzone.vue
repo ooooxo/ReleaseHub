@@ -67,19 +67,21 @@ async function onInputChange(e) {
 
 <style scoped>
 .drop-zone {
-  border: 2px dashed var(--border);
+  border: 1.5px dashed var(--border-strong);
   border-radius: var(--radius);
   padding: 28px 20px;
   text-align: center;
   color: var(--text2);
   cursor: pointer;
-  transition: border-color 0.2s, background 0.2s;
+  transition: border-color 0.18s var(--ease), background 0.18s var(--ease), color 0.18s var(--ease);
   font-size: 14px;
   line-height: 1.55;
 }
+.drop-zone:hover,
 .drop-zone.drag {
-  border-color: rgba(232, 160, 53, 0.55);
-  background: rgba(232, 160, 53, 0.06);
+  border-color: var(--accent);
+  background: var(--accent-tint);
+  color: var(--accent);
 }
 .drop-zone.disabled {
   opacity: 0.5;

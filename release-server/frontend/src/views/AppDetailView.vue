@@ -1,207 +1,297 @@
 <template>
   <div class="layout-max">
-    <header class="top">
-      <button type="button" class="btn btn-ghost" @click="router.push('/')">← 总览</button>
-      <div class="title-block">
-        <div class="titles">
-          <h1>{{ displayLabel }}</h1>
-          <p class="pkg-sub">包名 <code>{{ appName }}</code></p>
+    <!-- 顶栏 -->
+    <div class="appbar">
+      <button type="button" class="back" title="返回总览" @click="router.push('/')">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M15 18l-6-6 6-6" /></svg>
+      </button>
+      <div class="ab-titles">
+        <h1>
+          {{ displayLabel }}
+          <span class="chip" :class="repoType === 'tauri' ? 'tauri' : 'general'">{{ repoType === 'tauri' ? 'Tauri' : 'General' }}</span>
+        </h1>
+        <span class="pkg">{{ appName }}</span>
+      </div>
+      <div class="ab-actions">
+        <button v-if="publicBase" type="button" class="btn btn-ghost btn-sm" @click="showApi = true">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M10 13a5 5 0 0 0 7 0l3-3a5 5 0 0 0-7-7l-1 1" /><path d="M14 11a5 5 0 0 0-7 0l-3 3a5 5 0 0 0 7 7l1-1" /></svg>
+          对外接口
+        </button>
+        <button type="button" class="btn btn-primary btn-sm" @click="showNewVer = true">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M12 5v14M5 12h14" /></svg>
+          新建版本
+        </button>
+      </div>
+    </div>
+
+    <!-- 当前发布 hero -->
+    <div v-if="latestLoaded && published" class="published">
+      <div class="pub-main">
+        <span class="pub-label">当前发布</span>
+        <div class="pub-ver">{{ published.version }}</div>
+        <div class="pub-meta">
+          <template v-if="publishedPubDate">发布于 {{ fmtDate(publishedPubDate) }} · </template>{{ versions.length }} 个历史版本
         </div>
-        <span class="badge-type">{{ repoType }}</span>
+        <div v-if="published.notes" class="pub-notes">{{ published.notes }}</div>
       </div>
-      <div class="actions">
-        <button type="button" class="btn btn-ghost danger" @click="confirmDeleteApp">删除应用</button>
-        <button type="button" class="btn btn-primary" @click="showNewVer = true">新建版本</button>
-      </div>
-    </header>
-
-    <section class="card meta-name-block">
-      <h2>软件信息</h2>
-      <label class="lbl">包名（目录与 URL；修改后 latest.json、直链与公开页路径全部变为新包名）</label>
-      <div class="row-input">
-        <input v-model="packageNameEdit" class="input code" spellcheck="false" :placeholder="appName" />
-        <button
-          type="button"
-          class="btn btn-primary btn-sm"
-          :disabled="savingPackageName || packageNameEdit.trim() === appName || !packageNameEdit.trim()"
-          @click="savePackageRename"
-        >
-          保存包名
+      <div class="pub-actions">
+        <button v-if="latestAppShortcutUrl" type="button" class="btn btn-primary" @click="copy(latestAppShortcutUrl)">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><rect x="9" y="9" width="11" height="11" rx="2" /><path d="M5 15V5a2 2 0 0 1 2-2h10" /></svg>
+          复制最新版本页
         </button>
+        <button type="button" class="btn btn-ghost" @click="showPubNotes = true">编辑发布说明</button>
       </div>
-      <label class="lbl">软件名（对外展示；留空则仅显示包名）</label>
-      <input v-model="displayNameEdit" class="input" :placeholder="appName" />
-      <label class="lbl">软件简介（可选，显示在对外版本页；不展示包名）</label>
-      <textarea
-        v-model="descriptionEdit"
-        class="textarea"
-        rows="4"
-        placeholder="一句话或简短介绍，支持换行"
-      />
-      <div class="row-btns" style="margin-top: 12px">
-        <button type="button" class="btn btn-primary" :disabled="savingPublicDisplay" @click="savePublicDisplay">
-          保存名称与简介
-        </button>
+    </div>
+    <div v-else-if="latestLoaded && !published" class="published empty-pub">
+      <div class="pub-main">
+        <span class="pub-label muted-label">尚未发布</span>
+        <div class="pub-empty-text">上传文件后，在某一版本上点击「设为最新发布」。</div>
       </div>
-    </section>
+    </div>
 
-    <section v-if="publicBase" class="card api-block">
-      <h2>对外接口</h2>
-      <p class="hint">旧版 Tauri / 脚本请继续使用 <code>latest.json</code>，行为不变。</p>
-      <ShareLinkRow v-if="latestAppShortcutUrl" label="最新版本页（推荐）" :url="latestAppShortcutUrl" />
-      <ShareLinkRow v-if="publishedVersionPageUrl" label="当前发布版本页" :url="publishedVersionPageUrl" />
-      <p v-if="latestAppShortcutUrl" class="hint sm no-mt">
-        <code>/app/{{ appName }}/latest</code> 会 302 到当前已发布目录；固定版本链接为 <code>/app/{{ appName }}/&lt;目录名&gt;</code>。版本页：<strong>点击文件名</strong>进入单文件说明页，右侧<strong>下载</strong>为直链；列表不展示
-        <code>.sig</code>。
-      </p>
-      <ShareLinkRow label="latest.json" :url="latestJsonUrl" />
-      <ShareLinkRow label="JSON 摘要" :url="downloadInfoUrl" />
-      <ShareLinkRow label="直链跳转" :url="downloadRedirectUrl" />
-      <p class="hint sm no-mt">
-        带 <code>?redirect=1</code> 时 302 到<strong>当前已发布</strong>主安装包直链（按磁盘 + BASE_URL）。<strong>Tauri</strong> 会排除
-        <code>.sig</code>，只选 exe/msi/dmg/AppImage 等本体。
-      </p>
-    </section>
-
-    <section v-if="latestLoaded && published" class="card pub-block">
-      <h2>当前已发布</h2>
-      <p class="ver-line">版本 <strong>{{ published.version }}</strong></p>
-
-      <label class="lbl">发布时间 pub_date（ISO 字符串，可选）</label>
-      <div class="row-input">
-        <input v-model="publishedPubDate" class="input" placeholder="2025-01-01T12:00:00.000Z" />
-        <button type="button" class="btn btn-ghost btn-sm" :disabled="savingPubDate" @click="savePublishedPubDate">保存时间</button>
-      </div>
-
-      <label class="lbl">已发布更新说明（保存后直接写 latest.json，无需重新发布）</label>
-      <textarea v-model="publishedNotes" class="textarea" rows="5" placeholder="更新说明…" />
-      <div class="row-btns">
-        <button type="button" class="btn btn-primary" :disabled="savingPub" @click="savePublishedNotes">保存说明</button>
-      </div>
-
-      <template v-if="repoType === 'tauri'">
-        <label class="lbl">已发布 platforms（JSON，高级）</label>
-        <textarea v-model="publishedPlatformsJson" class="textarea code" rows="12" spellcheck="false" />
-        <button type="button" class="btn btn-ghost" :disabled="savingPlatforms" @click="savePublishedPlatforms">保存 platforms</button>
-      </template>
-      <template v-else>
-        <label class="lbl">已发布 files（JSON 数组，高级）</label>
-        <textarea v-model="publishedFilesJson" class="textarea code" rows="12" spellcheck="false" />
-        <button type="button" class="btn btn-ghost" :disabled="savingFiles" @click="savePublishedFiles">保存 files</button>
-      </template>
-
-      <div class="row-btns mt">
-        <button type="button" class="btn btn-ghost" :disabled="refreshingUrls" @click="refreshPublishedUrls">
-          刷新下载链接（合并磁盘）
-        </button>
-        <button type="button" class="btn btn-ghost danger" :disabled="refreshingUrls" @click="refreshPublishedUrlsReplace">
-          从磁盘完全重建…
-        </button>
-      </div>
-      <p class="hint sm">
-        合并：只更新磁盘上能匹配到的文件的 URL / 签名，保留手工平台或条目。完全重建：仅用磁盘扫描结果覆盖 platforms 或 files，可能丢失手工数据。
-      </p>
-    </section>
-    <section v-else-if="latestLoaded && !published" class="card pub-block muted-box">
-      <p>尚未发布任何版本。上传文件后在某一版本上点击「设为最新发布」。</p>
-    </section>
+    <!-- 版本列表 -->
+    <div class="section-bar">
+      <div class="sb-l"><h2>版本</h2><span class="sb-count">{{ versions.length }} 个</span></div>
+    </div>
 
     <div v-if="loading" class="muted">加载中…</div>
-    <div v-else class="v-grid">
-      <article v-for="v in versions" :key="v.version" class="card v-card">
-        <header class="v-head">
-          <span class="v-name">{{ v.version }}</span>
-          <span v-if="v.isLatest" class="pill">当前最新</span>
-          <div class="v-actions">
-            <button
-              v-if="publicBase"
-              type="button"
-              class="btn btn-sm btn-ghost"
-              @click="copy(versionPageUrl(v.version))"
-            >
-              复制版本页
-            </button>
-            <details class="ver-more">
-              <summary class="ver-more-sum">更多</summary>
-              <div class="ver-more-menu">
-                <button
-                  type="button"
-                  class="ver-more-danger"
-                  @click="confirmDeleteVersion(v.version)"
-                >
-                  删除此版本…
-                </button>
+    <div v-else-if="!versions.length" class="muted empty-v">还没有任何版本，点击右上角「新建版本」开始。</div>
+    <div v-else class="vlist">
+      <article v-for="v in versions" :key="v.version" class="vcard" :class="{ open: openVer === v.version }">
+        <div class="vhead" @click="toggleVer(v.version)">
+          <span class="vnum">{{ v.version }}</span>
+          <span v-if="v.isLatest" class="latest">当前最新</span>
+          <div class="vplats">
+            <span v-for="c in versionChips(v)" :key="c" class="vchip">{{ c }}</span>
+          </div>
+          <span class="vfiles-n">{{ realFiles(v).length }} 文件</span>
+          <svg class="chev" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M6 9l6 6 6-6" /></svg>
+        </div>
+        <div class="vbody">
+          <div class="vbody-inner">
+            <!-- 草稿 -->
+            <div>
+              <span class="field-label">此版本说明草稿（仅草稿；发布时会写入 latest）</span>
+              <textarea
+                v-model="notesDraft[v.version]"
+                class="textarea"
+                rows="3"
+                placeholder="更新说明草稿…"
+                @blur="saveDraft(v.version)"
+              />
+              <div class="draft-actions">
+                <button type="button" class="btn btn-ghost btn-sm" @click="saveDraft(v.version)">保存草稿</button>
               </div>
-            </details>
-            <div class="v-publish">
-              <button
-                v-if="!v.isLatest"
-                type="button"
-                class="btn btn-sm btn-primary"
-                @click="quickPublish(v.version)"
+            </div>
+
+            <!-- 上传投放区 -->
+            <div>
+              <div
+                class="dropmini"
+                :class="{ drag: dragVer === v.version }"
+                @dragover.prevent="dragVer = v.version"
+                @dragleave="dragVer = null"
+                @drop.prevent="onDrop($event, v.version)"
+                @click="triggerFile(v.version)"
               >
-                设为最新发布
-              </button>
-              <button v-else type="button" class="btn btn-sm btn-ghost" @click="republish(v.version)">重新发布</button>
+                <input
+                  :ref="el => setFileInput(v.version, el)"
+                  type="file"
+                  multiple
+                  class="hidden-input"
+                  @change="onFileChange(v.version, $event)"
+                />
+                <b>{{ repoType === 'tauri' ? '拖拽各平台包及对应 .sig 到此' : '拖拽文件到此处' }}</b>
+                或点击上传
+              </div>
+              <div v-if="uploadProgress[v.version] != null && uploadProgress[v.version] >= 0" class="prog">
+                <div class="prog-bar"><div class="prog-fill" :style="{ width: uploadProgress[v.version] + '%' }" /></div>
+                <span class="prog-txt">{{ uploadProgress[v.version] }}%</span>
+              </div>
+              <div v-else-if="uploadProgress[v.version] === -1" class="prog-indet">上传中（无法计算进度）…</div>
+            </div>
+
+            <!-- 文件列表 -->
+            <div v-if="realFiles(v).length">
+              <span class="field-label">文件 · {{ realFiles(v).length }}</span>
+              <div class="filelist">
+                <div v-for="f in realFiles(v)" :key="f.name" class="frow">
+                  <span class="fi" :class="{ sig: isSig(f.name) }">
+                    <svg v-if="isSig(f.name)" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M12 2 4 6v6c0 5 3.4 8 8 10 4.6-2 8-5 8-10V6z" /></svg>
+                    <svg v-else viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4M7 10l5 5 5-5M12 15V3" /></svg>
+                  </span>
+                  <a class="fname" :href="fileLandingUrl(v.version, f.name)" target="_blank" rel="noopener">{{ f.name }}</a>
+                  <span class="fsize">{{ fmtSize(f.size) }}</span>
+                  <button type="button" class="fdel" title="删除文件" @click.stop="deleteFile(v.version, f.name)">×</button>
+                </div>
+              </div>
+            </div>
+
+            <!-- 版本操作 -->
+            <div class="vactions">
+              <button v-if="!v.isLatest" type="button" class="btn btn-primary btn-sm" @click="quickPublish(v.version)">设为最新发布</button>
+              <button v-else type="button" class="btn btn-ghost btn-sm" @click="republish(v.version)">重新发布</button>
+              <button v-if="publicBase" type="button" class="btn btn-ghost btn-sm" @click="copy(versionPageUrl(v.version))">复制版本页</button>
+              <button type="button" class="btn btn-danger btn-sm" @click="confirmDeleteVersion(v.version)">删除此版本</button>
             </div>
           </div>
-        </header>
-        <div class="notes">
-          <label class="lbl">此版本说明草稿</label>
-          <textarea
-            v-model="notesDraft[v.version]"
-            class="textarea sm"
-            rows="3"
-            placeholder="仅草稿；发布时会写入 latest"
-            @blur="saveDraft(v.version)"
-          />
-          <button type="button" class="btn btn-sm btn-ghost" @click="saveDraft(v.version)">保存草稿</button>
         </div>
-        <div
-          class="drop-zone"
-          :class="{ drag: dragVer === v.version }"
-          @dragover.prevent="dragVer = v.version"
-          @dragleave="dragVer = null"
-          @drop.prevent="onDrop($event, v.version)"
-          @click="triggerFile(v.version)"
-        >
-          <input
-            :ref="el => setFileInput(v.version, el)"
-            type="file"
-            multiple
-            class="hidden-input"
-            @change="onFileChange(v.version, $event)"
-          />
-          <span>拖拽文件到此处或点击上传</span>
-          <span v-if="repoType === 'tauri'" class="subz">Tauri 需上传各平台包及对应 .sig</span>
-        </div>
-        <div v-if="uploadProgress[v.version] != null && uploadProgress[v.version] >= 0" class="prog">
-          <div class="prog-bar">
-            <div class="prog-fill" :style="{ width: uploadProgress[v.version] + '%' }" />
-          </div>
-          <span class="prog-txt">{{ uploadProgress[v.version] }}%</span>
-        </div>
-        <div v-else-if="uploadProgress[v.version] === -1" class="prog indet">上传中（无法计算进度）…</div>
-        <ul class="files">
-          <li v-for="f in v.files.filter(x => x.name !== '.gitkeep')" :key="f.name">
-            <a :href="fileLandingUrl(v.version, f.name)" target="_blank" rel="noopener">{{ f.name }}</a>
-            <span class="sz">{{ fmtSize(f.size) }}</span>
-            <button type="button" class="btn-icon" @click.stop="deleteFile(v.version, f.name)">×</button>
-          </li>
-        </ul>
       </article>
     </div>
 
+    <!-- 高级 / 危险操作 -->
+    <div class="adv" :class="{ open: advOpen }">
+      <div class="adv-head" @click="advOpen = !advOpen">
+        <span class="adv-ico">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7"><circle cx="12" cy="12" r="3" /><path d="M19 12a7 7 0 0 0-.1-1l2-1.5-2-3.5-2.4 1a7 7 0 0 0-1.7-1l-.4-2.5h-4l-.4 2.5a7 7 0 0 0-1.7 1l-2.4-1-2 3.5 2 1.5a7 7 0 0 0 0 2l-2 1.5 2 3.5 2.4-1a7 7 0 0 0 1.7 1l.4 2.5h4l.4-2.5a7 7 0 0 0 1.7-1l2.4 1 2-3.5-2-1.5a7 7 0 0 0 .1-1z" /></svg>
+        </span>
+        <div class="adv-t">
+          <h3>高级 / 危险操作</h3>
+          <p>软件信息、{{ repoType === 'tauri' ? 'platforms' : 'files' }} JSON、发布时间、从磁盘重建 — 默认收起</p>
+        </div>
+        <svg class="chev" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M6 9l6 6 6-6" /></svg>
+      </div>
+      <div class="adv-body">
+        <!-- 软件信息编辑 -->
+        <div class="adv-group">
+          <span class="field-label">软件信息（包名 / 展示名 / 简介）</span>
+          <label class="sub-label">包名（目录与 URL；修改后 latest.json、直链与公开页路径全部变为新包名）</label>
+          <div class="row-input">
+            <input v-model="packageNameEdit" class="input code" spellcheck="false" :placeholder="appName" />
+            <button
+              type="button"
+              class="btn btn-primary btn-sm"
+              :disabled="savingPackageName || packageNameEdit.trim() === appName || !packageNameEdit.trim()"
+              @click="savePackageRename"
+            >
+              保存包名
+            </button>
+          </div>
+          <label class="sub-label">软件名（对外展示；留空则仅显示包名）</label>
+          <input v-model="displayNameEdit" class="input" :placeholder="appName" />
+          <label class="sub-label">软件简介（可选，显示在对外版本页；不展示包名）</label>
+          <textarea v-model="descriptionEdit" class="textarea" rows="4" placeholder="一句话或简短介绍，支持换行" />
+          <div class="adv-btns">
+            <button type="button" class="btn btn-primary btn-sm" :disabled="savingPublicDisplay" @click="savePublicDisplay">保存名称与简介</button>
+          </div>
+        </div>
+
+        <!-- 已发布管理 -->
+        <template v-if="latestLoaded && published">
+          <div class="adv-group">
+            <span class="field-label">发布时间 pub_date（ISO 字符串，可选）</span>
+            <div class="row-input">
+              <input v-model="publishedPubDate" class="input code" placeholder="2025-01-01T12:00:00.000Z" />
+              <button type="button" class="btn btn-ghost btn-sm" :disabled="savingPubDate" @click="savePublishedPubDate">保存时间</button>
+            </div>
+          </div>
+
+          <div class="adv-group">
+            <span class="field-label">已发布更新说明（保存后直接写 latest.json，无需重新发布）</span>
+            <textarea v-model="publishedNotes" class="textarea" rows="4" placeholder="更新说明…" />
+            <div class="adv-btns">
+              <button type="button" class="btn btn-primary btn-sm" :disabled="savingPub" @click="savePublishedNotes">保存说明</button>
+            </div>
+          </div>
+
+          <div v-if="repoType === 'tauri'" class="adv-group">
+            <span class="field-label">已发布 platforms（JSON，高级）</span>
+            <textarea v-model="publishedPlatformsJson" class="textarea code-ta" rows="12" spellcheck="false" />
+            <div class="adv-btns">
+              <button type="button" class="btn btn-ghost btn-sm" :disabled="savingPlatforms" @click="savePublishedPlatforms">保存 platforms</button>
+            </div>
+          </div>
+          <div v-else class="adv-group">
+            <span class="field-label">已发布 files（JSON 数组，高级）</span>
+            <textarea v-model="publishedFilesJson" class="textarea code-ta" rows="12" spellcheck="false" />
+            <div class="adv-btns">
+              <button type="button" class="btn btn-ghost btn-sm" :disabled="savingFiles" @click="savePublishedFiles">保存 files</button>
+            </div>
+          </div>
+
+          <div class="adv-group">
+            <span class="field-label">下载链接维护</span>
+            <div class="adv-btns">
+              <button type="button" class="btn btn-ghost btn-sm" :disabled="refreshingUrls" @click="refreshPublishedUrls">刷新下载链接（合并磁盘）</button>
+            </div>
+            <p class="adv-hint">合并：只更新磁盘上能匹配到的文件的 URL / 签名，保留手工平台或条目。</p>
+          </div>
+
+          <div class="danger-zone">
+            <span class="dz-t"><b>从磁盘完全重建</b> — 仅用磁盘扫描结果覆盖 {{ repoType === 'tauri' ? 'platforms' : 'files' }}，可能丢失手工数据</span>
+            <button type="button" class="btn btn-danger btn-sm" :disabled="refreshingUrls" @click="refreshPublishedUrlsReplace">完全重建…</button>
+          </div>
+        </template>
+
+        <div class="danger-zone">
+          <span class="dz-t"><b>删除应用</b> — 移除该应用及全部版本、latest.json、草稿与元数据，不可恢复</span>
+          <button type="button" class="btn btn-danger btn-sm" @click="confirmDeleteApp">删除应用…</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- 对外接口弹层 -->
+    <teleport to="body">
+      <div v-if="showApi && publicBase" class="modal-back" @click.self="showApi = false">
+        <div class="modal card modal-wide">
+          <div class="modal-head">
+            <h2>对外接口</h2>
+            <button type="button" class="modal-x" @click="showApi = false">×</button>
+          </div>
+          <div class="modal-body">
+            <p class="hint">旧版 Tauri / 脚本请继续使用 <code>latest.json</code>，行为不变。</p>
+            <ShareLinkRow v-if="latestAppShortcutUrl" label="最新版本页（推荐）" :url="latestAppShortcutUrl" />
+            <ShareLinkRow v-if="publishedVersionPageUrl" label="当前发布版本页" :url="publishedVersionPageUrl" />
+            <p v-if="latestAppShortcutUrl" class="hint sm">
+              <code>/app/{{ appName }}/latest</code> 会 302 到当前已发布目录；固定版本链接为 <code>/app/{{ appName }}/&lt;目录名&gt;</code>。版本页：<strong>点击文件名</strong>进入单文件说明页，右侧<strong>下载</strong>为直链；列表不展示 <code>.sig</code>。
+            </p>
+            <ShareLinkRow label="latest.json" :url="latestJsonUrl" />
+            <ShareLinkRow label="JSON 摘要" :url="downloadInfoUrl" />
+            <ShareLinkRow label="直链跳转" :url="downloadRedirectUrl" />
+            <p class="hint sm">
+              带 <code>?redirect=1</code> 时 302 到<strong>当前已发布</strong>主安装包直链（按磁盘 + BASE_URL）。<strong>Tauri</strong> 会排除 <code>.sig</code>，只选 exe/msi/dmg/AppImage 等本体。
+            </p>
+          </div>
+        </div>
+      </div>
+    </teleport>
+
+    <!-- 编辑发布说明弹层 -->
+    <teleport to="body">
+      <div v-if="showPubNotes && published" class="modal-back" @click.self="showPubNotes = false">
+        <div class="modal card">
+          <div class="modal-head">
+            <h2>编辑发布说明</h2>
+            <button type="button" class="modal-x" @click="showPubNotes = false">×</button>
+          </div>
+          <div class="modal-body">
+            <p class="hint sm">保存后直接写入 latest.json，无需重新发布。</p>
+            <textarea v-model="publishedNotes" class="textarea" rows="6" placeholder="更新说明…" />
+          </div>
+          <div class="row">
+            <button type="button" class="btn btn-ghost" @click="showPubNotes = false">取消</button>
+            <button type="button" class="btn btn-primary" :disabled="savingPub" @click="savePublishedNotesModal">保存说明</button>
+          </div>
+        </div>
+      </div>
+    </teleport>
+
+    <!-- 新建版本弹层 -->
     <teleport to="body">
       <div v-if="showNewVer" class="modal-back" @click.self="showNewVer = false">
         <div class="modal card">
-          <h2>新建版本</h2>
-          <p v-if="repoType === 'tauri'" class="hint">Tauri：须为 SemVer 2.0 三段式，如 v1.0.0</p>
-          <p v-else class="hint">
-            通用：目录名即版本标识（字母数字、点、下划线、连字符），如 <code>2.0.2</code>、<code>2024-01</code>、<code>1.0-beta</code>，不强制 <code>v</code> 前缀。
-          </p>
-          <input v-model="newVerInput" class="input" :placeholder="repoType === 'tauri' ? 'v1.0.0' : '例如 2.0.2 或 1.0-beta'" />
-          <p v-if="newVerErr" class="err">{{ newVerErr }}</p>
+          <div class="modal-head">
+            <h2>新建版本</h2>
+            <button type="button" class="modal-x" @click="showNewVer = false">×</button>
+          </div>
+          <div class="modal-body">
+            <p v-if="repoType === 'tauri'" class="hint sm">Tauri：须为 SemVer 2.0 三段式，如 v1.0.0</p>
+            <p v-else class="hint sm">
+              通用：目录名即版本标识（字母数字、点、下划线、连字符），如 <code>2.0.2</code>、<code>2024-01</code>、<code>1.0-beta</code>，不强制 <code>v</code> 前缀。
+            </p>
+            <input v-model="newVerInput" class="input" :placeholder="repoType === 'tauri' ? 'v1.0.0' : '例如 2.0.2 或 1.0-beta'" @keyup.enter="createVersion" />
+            <p v-if="newVerErr" class="err">{{ newVerErr }}</p>
+          </div>
           <div class="row">
             <button type="button" class="btn btn-ghost" @click="showNewVer = false">取消</button>
             <button type="button" class="btn btn-primary" :disabled="creatingVer" @click="createVersion">创建</button>
@@ -253,6 +343,12 @@ const creatingVer = ref(false);
 const dragVer = ref(null);
 const uploadProgress = ref({});
 const fileInputs = ref({});
+
+// 渐进披露：版本卡展开态、高级折叠态、弹层
+const openVer = ref(null);
+const advOpen = ref(false);
+const showApi = ref(false);
+const showPubNotes = ref(false);
 
 const displayLabel = computed(() => displayNameEdit.value.trim() || appName.value);
 
@@ -323,6 +419,45 @@ function fmtSize(b) {
   if (b < 1024) return `${b} B`;
   if (b < 1048576) return `${(b / 1024).toFixed(1)} KB`;
   return `${(b / 1048576).toFixed(1)} MB`;
+}
+
+function fmtDate(s) {
+  const d = new Date(s);
+  if (Number.isNaN(d.getTime())) return s;
+  const p = n => String(n).padStart(2, '0');
+  return `${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())}`;
+}
+
+function isSig(name) {
+  return /\.sig$/i.test(name);
+}
+
+// 折叠态展示：过滤占位文件
+function realFiles(v) {
+  return (v.files || []).filter(x => x.name !== '.gitkeep');
+}
+
+// 折叠态平台/文件概况 chips（按扩展名归类）
+function versionChips(v) {
+  const counts = { win: 0, mac: 0, linux: 0, other: 0 };
+  for (const f of realFiles(v)) {
+    if (isSig(f.name)) continue;
+    const n = f.name.toLowerCase();
+    if (/\.(exe|msi)$/.test(n)) counts.win += 1;
+    else if (/\.(dmg|pkg)$/.test(n)) counts.mac += 1;
+    else if (/\.(appimage|deb|rpm)$/.test(n)) counts.linux += 1;
+    else counts.other += 1;
+  }
+  const out = [];
+  if (counts.win) out.push(`win ×${counts.win}`);
+  if (counts.mac) out.push(`mac ×${counts.mac}`);
+  if (counts.linux) out.push(`linux ×${counts.linux}`);
+  if (counts.other) out.push(`其他 ×${counts.other}`);
+  return out;
+}
+
+function toggleVer(ver) {
+  openVer.value = openVer.value === ver ? null : ver;
 }
 
 function setFileInput(ver, el) {
@@ -490,6 +625,11 @@ async function savePublishedNotes() {
   } finally {
     savingPub.value = false;
   }
+}
+
+async function savePublishedNotesModal() {
+  await savePublishedNotes();
+  if (!savingPub.value) showPubNotes.value = false;
 }
 
 async function savePublishedPubDate() {
@@ -738,6 +878,7 @@ watch(
   () => route.params.name,
   () => {
     packageNameEdit.value = appName.value;
+    openVer.value = null;
     loadAll();
   },
   { immediate: true },
@@ -745,335 +886,94 @@ watch(
 </script>
 
 <style scoped>
-.top {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  gap: 12px;
-  margin-bottom: 22px;
-}
-.title-block {
-  flex: 1;
-  min-width: 120px;
+/* 顶栏标题里的 chip 与系统字体对齐 */
+.ab-titles h1 {
   display: flex;
   align-items: center;
-  gap: 12px;
-}
-.titles {
-  min-width: 0;
-}
-h1 {
-  margin: 0;
-  font-size: 24px;
-}
-.pkg-sub {
-  margin: 6px 0 0;
-  font-size: 13px;
-  color: var(--text2);
-}
-.pkg-sub code {
-  font-size: 12px;
-}
-.meta-name-block {
-  padding: 20px;
-  margin-bottom: 20px;
-}
-.meta-name-block h2 {
-  margin: 0 0 8px;
-  font-size: 16px;
-}
-.hint.no-mt {
-  margin-top: 0;
-}
-.badge-type {
-  font-size: 11px;
-  text-transform: uppercase;
-  letter-spacing: 0.08em;
-  color: var(--text3);
-  border: 1px solid var(--border);
-  padding: 4px 8px;
-  border-radius: 4px;
-}
-.actions {
-  display: flex;
+  gap: 10px;
   flex-wrap: wrap;
-  gap: 8px;
 }
-.danger {
-  color: #ff9a8b;
-}
-.api-block,
-.pub-block {
-  padding: 20px;
-  margin-bottom: 20px;
-}
-.api-block h2,
-.pub-block h2 {
-  margin: 0 0 8px;
-  font-size: 16px;
-}
-.hint {
-  margin: 0 0 14px;
-  font-size: 13px;
+
+/* hero 发布说明摘要 */
+.pub-notes {
+  margin-top: 11px;
+  font-size: 0.8rem;
   color: var(--text2);
   line-height: 1.5;
+  white-space: pre-wrap;
+  max-width: 640px;
 }
-.mono {
-  flex: 1;
-  min-width: 200px;
-  word-break: break-all;
-  font-size: 12px;
-  color: var(--accent-dim);
+.empty-pub {
+  align-items: flex-start;
 }
-code {
-  background: rgba(0, 0, 0, 0.25);
-  padding: 2px 6px;
-  border-radius: 4px;
-}
-.ver-line {
-  margin: 0 0 12px;
-  font-size: 14px;
-  color: var(--text2);
-}
-.textarea {
-  width: 100%;
-  padding: 12px;
-  border: 1px solid var(--border);
-  border-radius: var(--radius-sm);
-  background: var(--surface);
-  color: var(--text);
-  font-family: inherit;
-  font-size: 14px;
-  resize: vertical;
-  margin-bottom: 10px;
-}
-.textarea.sm {
-  font-size: 13px;
-}
-.lbl {
-  display: block;
-  font-size: 12px;
-  color: var(--text2);
-  margin-bottom: 6px;
-}
-.row-btns {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 10px;
-}
-.row-input {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 10px;
-  align-items: center;
-  margin-bottom: 14px;
-}
-.row-input .input {
-  flex: 1;
-  min-width: 200px;
-}
-.textarea.code {
-  font-family: ui-monospace, monospace;
-  font-size: 12px;
-}
-.mt {
-  margin-top: 16px;
-}
-.hint.sm {
-  font-size: 12px;
-  margin-top: 10px;
-  margin-bottom: 0;
-}
-.muted-box {
-  padding: 18px;
-  margin-bottom: 20px;
-  color: var(--text2);
-}
-.v-grid {
-  display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
-  gap: 16px;
-}
-.v-card {
-  padding: 0;
-  display: flex;
-  flex-direction: column;
-}
-.v-head {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  gap: 8px;
-  padding: 14px 16px;
-  border-bottom: 1px solid var(--border);
-}
-.v-name {
-  font-weight: 700;
-  font-size: 16px;
-}
-.pill {
-  font-size: 10px;
-  text-transform: uppercase;
-  letter-spacing: 0.06em;
-  color: var(--ok);
-  border: 1px solid rgba(82, 212, 138, 0.35);
-  padding: 2px 8px;
-  border-radius: 4px;
-}
-.v-actions {
-  margin-left: auto;
-  display: flex;
-  flex-wrap: wrap;
-  gap: 6px;
-  align-items: center;
-}
-.ver-more {
-  position: relative;
-}
-.ver-more-sum {
-  cursor: pointer;
-  list-style: none;
-  font-size: 12px;
+.muted-label {
   color: var(--text3);
-  padding: 6px 10px;
-  border: 1px solid var(--border);
-  border-radius: 4px;
-  background: rgba(0, 0, 0, 0.2);
 }
-.ver-more-sum::-webkit-details-marker {
-  display: none;
+.muted-label::before {
+  background: var(--text3);
+  box-shadow: none;
 }
-.ver-more[open] .ver-more-sum {
-  color: var(--text);
-  border-color: rgba(232, 160, 53, 0.35);
-}
-.v-publish {
-  margin-left: auto;
-  display: flex;
-  flex-wrap: wrap;
-  gap: 6px;
-  align-items: center;
-}
-.ver-more-menu {
-  position: absolute;
-  right: 0;
-  top: 100%;
+.pub-empty-text {
+  font-size: 0.85rem;
+  color: var(--text2);
   margin-top: 4px;
-  z-index: 20;
-  min-width: 160px;
-  padding: 8px;
-  background: var(--surface);
-  border: 1px solid var(--border);
-  border-radius: 6px;
-  box-shadow: 0 12px 32px rgba(0, 0, 0, 0.4);
 }
-.ver-more-danger {
-  width: 100%;
-  text-align: left;
-  padding: 8px 10px;
-  border: none;
-  border-radius: 4px;
-  background: rgba(232, 93, 76, 0.12);
-  color: #ff9a8b;
-  font-size: 13px;
-  cursor: pointer;
-}
-.ver-more-danger:hover {
-  background: rgba(232, 93, 76, 0.2);
-}
-.notes {
-  padding: 12px 16px;
-  border-bottom: 1px solid var(--border);
-}
-.drop-zone {
-  margin: 12px 16px;
-  padding: 22px;
-  border: 1px dashed rgba(232, 160, 53, 0.35);
-  border-radius: var(--radius-sm);
-  text-align: center;
-  cursor: pointer;
-  font-size: 13px;
+
+.muted {
   color: var(--text2);
-  transition: background 0.2s, border-color 0.2s;
+  font-size: 0.85rem;
 }
-.drop-zone.drag {
-  background: rgba(232, 160, 53, 0.08);
-  border-color: var(--accent);
+.empty-v {
+  padding: 18px 0;
 }
-.subz {
-  display: block;
-  margin-top: 6px;
-  font-size: 11px;
-  color: var(--text3);
-}
+
+/* 版本卡内：草稿与无进度提示 */
 .hidden-input {
   display: none;
 }
-.prog {
-  padding: 0 16px 8px;
-}
-.prog-bar {
-  height: 6px;
-  background: rgba(255, 255, 255, 0.06);
-  border-radius: 3px;
-  overflow: hidden;
-}
-.prog-fill {
-  height: 100%;
-  background: linear-gradient(90deg, var(--accent-dim), var(--accent));
-  transition: width 0.15s ease;
-}
-.prog-txt {
-  font-size: 11px;
-  color: var(--text3);
-  margin-top: 4px;
-  display: block;
-}
-.prog.indet {
-  font-size: 12px;
-  color: var(--text3);
-}
-.files {
-  list-style: none;
-  margin: 0;
-  padding: 8px 16px 16px;
-}
-.files li {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  font-size: 13px;
-  padding: 6px 0;
-  border-top: 1px solid var(--border);
-}
-.files li:first-child {
-  border-top: none;
-}
-.files a {
-  flex: 1;
-  min-width: 0;
-  word-break: break-all;
-  color: var(--text);
-  text-decoration: none;
-}
-.files a:hover {
+.dropmini.drag {
+  border-color: var(--accent);
   color: var(--accent);
+  background: var(--accent-tint);
 }
-.sz {
+.draft-actions {
+  margin-top: 8px;
+}
+.prog-indet {
+  margin-top: 10px;
+  font-size: 0.74rem;
   color: var(--text3);
-  font-size: 12px;
 }
-.btn-icon {
-  border: none;
-  background: rgba(232, 93, 76, 0.15);
-  color: #ff9a8b;
-  width: 28px;
-  height: 28px;
-  border-radius: 4px;
-  cursor: pointer;
-  font-size: 18px;
-  line-height: 1;
+
+/* 高级区分组 */
+.adv-group {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
 }
+.adv-group .row-input {
+  margin: 0;
+}
+.sub-label {
+  display: block;
+  font-size: 0.72rem;
+  color: var(--text2);
+  margin-top: 4px;
+}
+.adv-btns {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-top: 2px;
+}
+.adv-hint {
+  margin: 2px 0 0;
+  font-size: 0.72rem;
+  color: var(--text3);
+  line-height: 1.5;
+}
+
+/* 弹层 */
 .modal-back {
   position: fixed;
   inset: 0;
@@ -1086,24 +986,80 @@ code {
 }
 .modal {
   width: 100%;
-  max-width: 400px;
+  max-width: 440px;
   padding: 22px;
 }
-.modal h2 {
-  margin: 0 0 12px;
+.modal-wide {
+  max-width: 620px;
+}
+.modal-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 14px;
+}
+.modal-head h2 {
+  margin: 0;
+  font-size: 1.05rem;
+  font-weight: 650;
+}
+.modal-x {
+  border: none;
+  background: transparent;
+  color: var(--text3);
+  font-size: 22px;
+  line-height: 1;
+  cursor: pointer;
+  width: 30px;
+  height: 30px;
+  border-radius: var(--radius-xs);
+}
+.modal-x:hover {
+  color: var(--text);
+  background: var(--surface2);
+}
+.modal-body {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
 }
 .row {
   display: flex;
   justify-content: flex-end;
   gap: 10px;
-  margin-top: 16px;
+  margin-top: 18px;
+}
+.hint {
+  margin: 0 0 12px;
+  font-size: 0.82rem;
+  color: var(--text2);
+  line-height: 1.55;
+}
+.hint.sm {
+  font-size: 0.74rem;
+  margin: 8px 0 0;
 }
 .err {
   color: var(--danger);
-  font-size: 13px;
+  font-size: 0.82rem;
   margin: 8px 0 0;
 }
-.muted {
-  color: var(--text2);
+code {
+  background: var(--inset);
+  padding: 1px 5px;
+  border-radius: 4px;
+  font-family: var(--font-mono);
+  font-size: 0.85em;
+}
+
+/* 危险按钮（global.css 未定义，页面内补充，遵循 morii 危险色） */
+.btn-danger {
+  background: var(--danger-tint);
+  color: var(--danger-text);
+  border: 1px solid transparent;
+}
+.btn-danger:hover:not(:disabled) {
+  border-color: var(--danger);
+  color: var(--danger);
 }
 </style>

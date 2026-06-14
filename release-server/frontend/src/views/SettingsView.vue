@@ -1,8 +1,13 @@
 <template>
-  <div class="layout-max">
-    <header class="top top-settings">
-      <h1>设置</h1>
-    </header>
+  <div class="layout-max settings-narrow">
+    <div class="appbar">
+      <button type="button" class="back" aria-label="返回" @click="router.push('/')">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M15 18l-6-6 6-6" /></svg>
+      </button>
+      <div class="ab-titles">
+        <h1>设置</h1>
+      </div>
+    </div>
 
     <section class="card block">
       <h2>数据目录（排查「应用列表为空」）</h2>
@@ -26,10 +31,10 @@
         <p v-for="(p, k) in tempSubdirs" :key="k" class="mono-path sub-indent">
           <span class="lbl-inline">{{ k }}</span>{{ p }}
         </p>
-        <p v-if="tempFileCounts" class="file-counts">
-          <span>文件数 — pending {{ tempFileCounts.pending }} · blobs {{ tempFileCounts.blobs }} · meta {{ tempFileCounts.meta }} · token-index {{ tempFileCounts.tokenIndex }}</span>
+        <p v-if="tempFileCounts" class="hint sm">
+          文件数 — pending {{ tempFileCounts.pending }} · blobs {{ tempFileCounts.blobs }} · meta {{ tempFileCounts.meta }} · token-index {{ tempFileCounts.tokenIndex }}
         </p>
-        <p v-if="tempSweep" class="muted sm">
+        <p v-if="tempSweep" class="hint sm">
           最近清扫：{{ tempSweep.at }} · 已删记录 {{ tempSweep.removed }} · 已清 pending
           {{ tempSweep.pendingRemoved }} · 旧墓碑 {{ tempSweep.legacyTokensRemoved }} · 错误
           {{ tempSweep.errorCount }} · {{ tempSweep.durationMs }}ms（定时约每 {{ tempSweepIntervalSec }}s）
@@ -49,32 +54,48 @@
     <section class="card block">
       <h2>磁盘空间（releases 卷）</h2>
       <p v-if="diskError" class="disk-err">{{ diskError }}</p>
-      <p v-else-if="!disk" class="muted">当前环境无法读取磁盘统计（不支持 statfs 或路径不可用）</p>
-      <p v-else class="disk">
-        已用 <strong>{{ formatBytes(disk.used) }}</strong> / 共 {{ formatBytes(disk.total) }} · 剩余
-        {{ formatBytes(disk.free) }}
-      </p>
+      <p v-else-if="!disk" class="hint">当前环境无法读取磁盘统计（不支持 statfs 或路径不可用）</p>
+      <template v-else>
+        <div class="prog">
+          <div class="prog-bar"><div class="prog-fill" :style="{ width: usedPct + '%' }" /></div>
+          <span class="prog-txt">{{ usedPct }}%</span>
+        </div>
+        <p class="hint sm">
+          已用 <b>{{ formatBytes(disk.used) }}</b> / 共 {{ formatBytes(disk.total) }} · 剩余 {{ formatBytes(disk.free) }}
+        </p>
+      </template>
     </section>
 
     <section class="card block">
       <h2>修改密码</h2>
-      <label class="lbl">当前密码</label>
-      <input v-model="oldPwd" type="password" class="input" autocomplete="current-password" />
-      <label class="lbl">新密码（至少 5 位）</label>
-      <input v-model="newPwd" type="password" class="input" autocomplete="new-password" />
-      <label class="lbl">确认新密码</label>
-      <input v-model="newPwd2" type="password" class="input" autocomplete="new-password" />
-      <button type="button" class="btn btn-primary mt" :disabled="changingPwd" @click="changePwd">更新密码</button>
+      <div class="pwd-form">
+        <div>
+          <span class="field-label">当前密码</span>
+          <input v-model="oldPwd" type="password" class="input" autocomplete="current-password" />
+        </div>
+        <div>
+          <span class="field-label">新密码（至少 5 位）</span>
+          <input v-model="newPwd" type="password" class="input" autocomplete="new-password" />
+        </div>
+        <div>
+          <span class="field-label">确认新密码</span>
+          <input v-model="newPwd2" type="password" class="input" autocomplete="new-password" />
+        </div>
+        <button type="button" class="btn btn-primary pwd-submit" :disabled="changingPwd" @click="changePwd">更新密码</button>
+      </div>
     </section>
 
-    <footer class="foot">
-      <button type="button" class="btn btn-ghost" @click="logout">退出登录</button>
-    </footer>
+    <div class="foot">
+      <button type="button" class="btn btn-ghost" @click="logout">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4M16 17l5-5-5-5M21 12H9" /></svg>
+        退出登录
+      </button>
+    </div>
   </div>
 </template>
 
 <script setup>
-import { ref, onMounted } from 'vue';
+import { ref, computed, onMounted } from 'vue';
 import { useRouter } from 'vue-router';
 import { useAuthStore } from '@/stores/auth';
 import { api } from '@/api/client';
@@ -101,6 +122,12 @@ const oldPwd = ref('');
 const newPwd = ref('');
 const newPwd2 = ref('');
 const changingPwd = ref(false);
+
+const usedPct = computed(() => {
+  const d = disk.value;
+  if (!d || !d.total) return 0;
+  return Math.min(100, Math.round((d.used / d.total) * 100));
+});
 
 async function load() {
   try {
@@ -178,99 +205,87 @@ onMounted(load);
 </script>
 
 <style scoped>
-.top {
-  display: flex;
-  align-items: center;
-  gap: 16px;
-  margin-bottom: 24px;
-}
-.top h1 {
-  margin: 0;
-  font-size: 22px;
+.settings-narrow {
+  max-width: 760px;
 }
 .block {
   padding: 22px;
-  margin-bottom: 18px;
+  margin-bottom: 16px;
 }
 .block h2 {
   margin: 0 0 10px;
-  font-size: 16px;
+  font-size: 1rem;
+  font-weight: 650;
+  color: var(--text);
 }
 .hint {
-  margin: 0 0 14px;
-  font-size: 13px;
+  margin: 0 0 12px;
+  font-size: 0.8rem;
   color: var(--text2);
-  line-height: 1.5;
+  line-height: 1.55;
+}
+.hint:last-child {
+  margin-bottom: 0;
+}
+.hint.sm {
+  font-size: 0.74rem;
+  margin: 9px 0 0;
+}
+.hint b {
+  color: var(--text);
+  font-weight: 650;
+  font-variant-numeric: tabular-nums;
+}
+.hint code {
+  font-family: var(--font-mono);
+  font-size: 0.92em;
+  color: var(--accent-text);
 }
 .path-hint {
-  margin-top: 4px;
+  margin-top: 8px;
 }
 .sub-indent {
-  padding-left: 8px;
-  border-left: 2px solid rgba(232, 160, 53, 0.25);
-  margin-left: 2px;
-}
-.file-counts {
-  font-size: 12px;
-  color: var(--text2);
-  margin: 0 0 10px;
-  line-height: 1.45;
-}
-.sm {
-  font-size: 12px;
-  line-height: 1.5;
-}
-.mono-path {
-  font-size: 12px;
-  font-family: ui-monospace, monospace;
-  word-break: break-all;
-  color: var(--accent-dim);
-  margin: 0 0 10px;
-  line-height: 1.5;
-}
-.lbl-inline {
-  display: block;
-  font-size: 11px;
-  color: var(--text3);
-  margin-bottom: 4px;
-  font-family: system-ui, sans-serif;
-}
-.row-input {
-  display: flex;
-  gap: 10px;
-  flex-wrap: wrap;
+  margin-left: 10px;
 }
 .row-input .input {
   flex: 1;
   min-width: 200px;
 }
-.lbl {
-  display: block;
-  font-size: 12px;
-  color: var(--text2);
-  margin: 12px 0 6px;
+.pwd-form {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  margin-top: 4px;
+  max-width: 360px;
 }
-.mt {
-  margin-top: 16px;
-}
-.muted {
-  color: var(--text2);
-  font-size: 14px;
-}
-.disk {
-  font-size: 14px;
-  color: var(--text2);
-}
-.disk strong {
-  color: var(--text);
+.pwd-submit {
+  align-self: flex-start;
+  margin-top: 4px;
 }
 .disk-err {
   margin: 0;
-  font-size: 14px;
+  font-size: 0.82rem;
   color: var(--danger);
   line-height: 1.5;
 }
+.prog {
+  margin-top: 4px;
+}
+.prog-txt {
+  font-variant-numeric: tabular-nums;
+}
 .foot {
-  margin-top: 28px;
+  display: flex;
+  justify-content: flex-end;
+  margin-top: 8px;
+}
+.foot .btn-ghost {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+}
+.foot .btn-ghost svg {
+  width: 16px;
+  height: 16px;
 }
 </style>
