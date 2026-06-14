@@ -36,6 +36,7 @@ const {
   getLatestPrimaryDownloadUrl,
   resolvePublishedVersionDir,
   getAppLastActivityMs,
+  autoUpdateLatestSigOnUpload,
 } = require('./releases');
 const {
   renderDownload404Html,
@@ -234,8 +235,10 @@ function registerRoutes(app) {
     },
     (req, res) => {
       const { app, version } = req.params;
+      const files = req.files || [];
+      autoUpdateLatestSigOnUpload(app, version, files);
       res.json({
-        uploaded: (req.files || []).map(f => ({
+        uploaded: files.map(f => ({
           name: f.originalname,
           size: f.size,
           url: fileUrl(app, version, f.originalname),

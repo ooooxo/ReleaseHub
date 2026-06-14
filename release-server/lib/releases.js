@@ -110,7 +110,15 @@ function readLatest(app) {
 }
 
 function writeLatest(app, data) {
-  fs.writeFileSync(path.join(CONFIG.RELEASES_DIR, app, 'latest.json'), JSON.stringify(data, null, 2), 'utf-8');
+  const filePath = path.join(CONFIG.RELEASES_DIR, app, 'latest.json');
+  const tmpPath = filePath + '.tmp';
+  try {
+    fs.writeFileSync(tmpPath, JSON.stringify(data, null, 2), 'utf-8');
+    fs.renameSync(tmpPath, filePath);
+  } catch (e) {
+    try { fs.unlinkSync(tmpPath); } catch { /* ignore */ }
+    throw e;
+  }
 }
 
 function readSig(app, ver, filename) {
@@ -240,7 +248,11 @@ function buildFilesFromDisk(app, vdir) {
     .map(f => ({ name: f.name, url: f.url, size: f.size }));
 }
 
-/** 合并刷新：仅更新磁盘上能匹配到的条目的 url（及 Tauri 的 signature），保留手工平台/文件项 */
+/**
+ * 合并刷新：从磁盘更新各平台的 url，但 signature 以 latest.json 中已存值为权威——
+ * 磁盘 .sig 只在 latest.json 里完全没有 sig 时才作为兜底。
+ * 保留手工添加的平台条目。
+ */
 function rebuildLatestUrlsMerge(app) {
   const latest = readLatest(app);
   if (!latest || typeof latest !== 'object') return null;
@@ -258,11 +270,14 @@ function rebuildLatestUrlsMerge(app) {
     for (const [plat, diskEntry] of Object.entries(fromDisk)) {
       const old = merged[plat];
       const oldObj = old && typeof old === 'object' && !Array.isArray(old) ? { ...old } : {};
-      const hasRealSig = diskEntry.signature && diskEntry.signature !== '(未找到 .sig 文件)';
+      const storedSig = oldObj.signature && oldObj.signature !== '(未找到 .sig 文件)'
+        ? oldObj.signature : null;
+      const diskSig = diskEntry.signature && diskEntry.signature !== '(未找到 .sig 文件)'
+        ? diskEntry.signature : null;
       merged[plat] = {
         ...oldObj,
         url: diskEntry.url,
-        signature: hasRealSig ? diskEntry.signature : oldObj.signature ?? diskEntry.signature,
+        signature: storedSig ?? diskSig ?? oldObj.signature ?? diskEntry.signature,
       };
     }
     return { ...latest, platforms: merged };
@@ -286,7 +301,11 @@ function rebuildLatestUrlsMerge(app) {
   return { ...latest, files: mergedList };
 }
 
-/** 完全按磁盘重建 platforms/files（危险：会丢掉磁盘上无法识别的手工条目） */
+/**
+ * 完全按磁盘重建 platforms/files（危险：会丢掉磁盘上无法识别的手工条目）。
+ * signature 仍以 latest.json 已存值优先——磁盘 .sig 只在无存值时兜底，
+ * 防止磁盘文件缺失时覆盖掉已正确存储的签名。
+ */
 function rebuildLatestUrlsReplace(app) {
   const latest = readLatest(app);
   if (!latest || typeof latest !== 'object') return null;
@@ -295,7 +314,21 @@ function rebuildLatestUrlsReplace(app) {
   if (!vdir) return null;
 
   if (meta.repoType === 'tauri') {
-    return { ...latest, platforms: buildPlatformsFromDisk(app, vdir) };
+    const fromDisk = buildPlatformsFromDisk(app, vdir);
+    const prev =
+      latest.platforms && typeof latest.platforms === 'object' && !Array.isArray(latest.platforms)
+        ? latest.platforms : {};
+    for (const [plat, diskEntry] of Object.entries(fromDisk)) {
+      const storedSig = prev[plat]?.signature && prev[plat].signature !== '(未找到 .sig 文件)'
+        ? prev[plat].signature : null;
+      const diskSig = diskEntry.signature && diskEntry.signature !== '(未找到 .sig 文件)'
+        ? diskEntry.signature : null;
+      fromDisk[plat] = {
+        ...diskEntry,
+        signature: storedSig ?? diskSig ?? diskEntry.signature,
+      };
+    }
+    return { ...latest, platforms: fromDisk };
   }
   return { ...latest, files: buildFilesFromDisk(app, vdir) };
 }
@@ -491,6 +524,46 @@ function getTauriPlatformUrl(latest, platform) {
   return null;
 }
 
+/**
+ * 上传文件后钩子：若上传的是 .sig 文件且目标版本正是当前已发布版本，
+ * 立即将签名写入 latest.json，无需等待下次发布或手动刷新。
+ * @param {string} app
+ * @param {string} version - 上传目标版本目录名（如 "v0.9.0"）
+ * @param {Array<{originalname: string}>} files - multer 文件对象列表
+ */
+function autoUpdateLatestSigOnUpload(app, version, files) {
+  const meta = readAppMeta(app);
+  if (meta.repoType !== 'tauri') return;
+  const latest = readLatest(app);
+  if (!latest?.version) return;
+
+  const publishedVdir = resolveDiskDirForLogicalVersion(app, latest.version);
+  if (publishedVdir !== version) return;
+
+  const platforms = {
+    ...(latest.platforms && typeof latest.platforms === 'object' ? latest.platforms : {}),
+  };
+  let changed = false;
+
+  for (const f of files) {
+    if (!f.originalname.toLowerCase().endsWith('.sig')) continue;
+    const mainFile = f.originalname.slice(0, -4);
+    const plat = detectPlatform(mainFile);
+    if (!plat) continue;
+    const sig = readSig(app, version, f.originalname);
+    if (!sig) continue;
+    platforms[plat] = { ...(platforms[plat] || {}), signature: sig };
+    if (!platforms[plat].url) {
+      platforms[plat].url = fileUrl(app, version, mainFile);
+    }
+    changed = true;
+  }
+
+  if (changed) {
+    writeLatest(app, { ...latest, platforms });
+  }
+}
+
 module.exports = {
   getApps,
   getAppLastActivityMs,
@@ -520,4 +593,5 @@ module.exports = {
   getPublicDownloadInfo,
   getTauriPlatformUrl,
   pickPrimaryTauriUrl,
+  autoUpdateLatestSigOnUpload,
 };
