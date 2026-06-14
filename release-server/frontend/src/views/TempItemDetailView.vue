@@ -51,13 +51,17 @@
             />
           </svg>
           <div class="bt" aria-live="polite">
-            <span class="bv mono">{{ liveRemaining }}</span>
+            <span class="bv mono">{{ ringRemaining }}</span>
             <span class="bl">剩余</span>
           </div>
         </div>
         <div class="timer-info">
           <span class="field-label">到期时间</span>
           <p class="expire-at mono">{{ expireLocal }}</p>
+          <p class="remain-line" :class="{ warn: nearExpiry, expired: isExpired }">
+            <span class="rl-v mono">{{ liveRemaining }}</span>
+            <span v-if="!isExpired" class="rl-suffix">后到期</span>
+          </p>
           <p class="hint sm">到期后文件与分享链自动失效并删除，不可恢复。</p>
         </div>
       </div>
@@ -171,6 +175,21 @@ const liveRemaining = computed(() => {
   return formatRemainingSec(sec);
 });
 
+/** 环内紧凑定宽倒计时：≥1 天 `Nd HH:MM`，否则 `HH:MM:SS`，单行不溢出 */
+const ringRemaining = computed(() => {
+  if (!item.value?.expireAt) return '—';
+  let s = Math.max(0, Math.floor((new Date(item.value.expireAt).getTime() - nowTick.value) / 1000));
+  if (s <= 0) return '00:00';
+  const p = (n) => String(n).padStart(2, '0');
+  const d = Math.floor(s / 86400);
+  s -= d * 86400;
+  const h = Math.floor(s / 3600);
+  s -= h * 3600;
+  const m = Math.floor(s / 60);
+  const r = s % 60;
+  return d > 0 ? `${d}d ${p(h)}:${p(m)}` : `${p(h)}:${p(m)}:${p(r)}`;
+});
+
 // 倒计时大环：半径 66 → 周长 2π·66 ≈ 414.69；以 24h 为满环基准映射进度
 const RING_C = 2 * Math.PI * 66;
 const RING_BASE_MS = 24 * 60 * 60 * 1000;
@@ -179,6 +198,7 @@ const remainingMs = computed(() => {
   return Math.max(0, new Date(item.value.expireAt).getTime() - nowTick.value);
 });
 const nearExpiry = computed(() => remainingMs.value > 0 && remainingMs.value < 60 * 60 * 1000);
+const isExpired = computed(() => !!item.value?.expireAt && remainingMs.value <= 0);
 const ringOffset = computed(() => {
   const frac = Math.min(1, remainingMs.value / RING_BASE_MS);
   return RING_C * (1 - frac);
@@ -302,6 +322,37 @@ onUnmounted(() => {
 .hint.sm {
   font-size: 0.78rem;
   margin: 9px 0 0;
+}
+
+/* 环内倒计时：定宽单行，绝不换行溢出环边 */
+.timer-card .bigring .bt .bv {
+  white-space: nowrap;
+  font-size: 1.4rem;
+  line-height: 1.05;
+  font-variant-numeric: tabular-nums;
+}
+
+/* 到期时间下方的精确剩余（口语化），与环色一致：常态 accent，临期 amber */
+.remain-line {
+  display: flex;
+  align-items: baseline;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin: 7px 0 0;
+  font-size: 0.82rem;
+}
+.remain-line .rl-v {
+  font-weight: 600;
+  color: var(--accent);
+}
+.remain-line .rl-suffix {
+  color: var(--text3);
+}
+.remain-line.warn .rl-v {
+  color: var(--amber);
+}
+.remain-line.expired .rl-v {
+  color: var(--danger);
 }
 
 .section-dim {
