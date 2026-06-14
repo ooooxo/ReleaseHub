@@ -3,6 +3,11 @@
 # Release Hub 一键部署脚本
 # 使用方法：在仓库根目录执行 bash deploy.sh
 #
+# 首次部署与重部署同一脚本（幂等）：改完代码或 git pull 后再次 bash deploy.sh 即可。
+#   重部署保留 .env / releases / resource-libraries / temp-transfers / 已签发证书，
+#   仅重装依赖（含新增 @tus/*）、重建前端、pm2 重启。重启期间未完成的上传由 tus 分片
+#   落盘，客户端联网后自动从断点续传，不丢进度。
+#
 # 安装目录 = 本脚本所在目录（与 server.js、releases/、.env 同级），不再使用 /opt
 #
 # Nginx：默认安装；关闭：USE_NGINX=0 或 SKIP_NGINX=1
@@ -466,6 +471,7 @@ mkdir -p "$INSTALL_DIR/public"
 mkdir -p "$INSTALL_DIR/releases"
 mkdir -p "$INSTALL_DIR/resource-libraries"
 mkdir -p "$INSTALL_DIR/temp-transfers"
+mkdir -p "$INSTALL_DIR/.uploads-incomplete"   # 断点续传未完成分片暂存（tus）
 
 if [ "$SCRIPT_DIR" != "$INSTALL_DIR" ]; then
   cp -f "$SCRIPT_DIR/server.js" "$INSTALL_DIR/"
