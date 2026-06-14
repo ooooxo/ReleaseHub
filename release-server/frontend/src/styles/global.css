@@ -146,6 +146,12 @@ a {
   overflow: hidden;
 }
 
+/* 卡内边距修饰（与 .card 组合用：.card.block）；详情/设置等多视图复用 */
+.block {
+  padding: 22px;
+  margin-bottom: 16px;
+}
+
 .layout-max {
   max-width: 1100px;
   margin: 0 auto;

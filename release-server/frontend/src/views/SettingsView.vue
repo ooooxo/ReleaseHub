@@ -208,10 +208,7 @@ onMounted(load);
 .settings-narrow {
   max-width: 760px;
 }
-.block {
-  padding: 22px;
-  margin-bottom: 16px;
-}
+/* .block 内边距已上移至 global.css 共享类 */
 .block h2 {
   margin: 0 0 10px;
   font-size: 1rem;
