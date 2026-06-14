@@ -24,6 +24,43 @@
       </div>
     </div>
 
+    <!-- 基本信息（包名 / 展示名 / 简介），独立于危险操作 -->
+    <div class="adv info-adv" :class="{ open: infoOpen }">
+      <div class="adv-head" @click="infoOpen = !infoOpen">
+        <span class="adv-ico">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M12 20h9" /><path d="M16.5 3.5a2.1 2.1 0 0 1 3 3L7 19l-4 1 1-4z" /></svg>
+        </span>
+        <div class="adv-t">
+          <h3>基本信息</h3>
+          <p>包名 / 展示名 / 简介</p>
+        </div>
+        <svg class="chev" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M6 9l6 6 6-6" /></svg>
+      </div>
+      <div class="adv-body">
+        <div class="adv-group">
+          <label class="sub-label">包名（目录与 URL；修改后 latest.json、直链与公开页路径全部变为新包名）</label>
+          <div class="row-input">
+            <input v-model="packageNameEdit" class="input code" spellcheck="false" :placeholder="appName" />
+            <button
+              type="button"
+              class="btn btn-primary btn-sm"
+              :disabled="savingPackageName || packageNameEdit.trim() === appName || !packageNameEdit.trim()"
+              @click="savePackageRename"
+            >
+              保存包名
+            </button>
+          </div>
+          <label class="sub-label">软件名（对外展示；留空则仅显示包名）</label>
+          <input v-model="displayNameEdit" class="input" :placeholder="appName" />
+          <label class="sub-label">软件简介（可选，显示在对外版本页；不展示包名）</label>
+          <textarea v-model="descriptionEdit" class="textarea" rows="4" placeholder="一句话或简短介绍，支持换行" />
+          <div class="adv-btns">
+            <button type="button" class="btn btn-primary btn-sm" :disabled="savingPublicDisplay" @click="savePublicDisplay">保存名称与简介</button>
+          </div>
+        </div>
+      </div>
+    </div>
+
     <!-- 当前发布 hero -->
     <div v-if="latestLoaded && published" class="published">
       <div class="pub-main">
@@ -147,35 +184,11 @@
         </span>
         <div class="adv-t">
           <h3>高级 / 危险操作</h3>
-          <p>软件信息、{{ repoType === 'tauri' ? 'platforms' : 'files' }} JSON、发布时间、从磁盘重建 — 默认收起</p>
+          <p>{{ repoType === 'tauri' ? 'platforms' : 'files' }} JSON、发布时间、从磁盘重建、删除应用 — 默认收起</p>
         </div>
         <svg class="chev" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M6 9l6 6 6-6" /></svg>
       </div>
       <div class="adv-body">
-        <!-- 软件信息编辑 -->
-        <div class="adv-group">
-          <span class="field-label">软件信息（包名 / 展示名 / 简介）</span>
-          <label class="sub-label">包名（目录与 URL；修改后 latest.json、直链与公开页路径全部变为新包名）</label>
-          <div class="row-input">
-            <input v-model="packageNameEdit" class="input code" spellcheck="false" :placeholder="appName" />
-            <button
-              type="button"
-              class="btn btn-primary btn-sm"
-              :disabled="savingPackageName || packageNameEdit.trim() === appName || !packageNameEdit.trim()"
-              @click="savePackageRename"
-            >
-              保存包名
-            </button>
-          </div>
-          <label class="sub-label">软件名（对外展示；留空则仅显示包名）</label>
-          <input v-model="displayNameEdit" class="input" :placeholder="appName" />
-          <label class="sub-label">软件简介（可选，显示在对外版本页；不展示包名）</label>
-          <textarea v-model="descriptionEdit" class="textarea" rows="4" placeholder="一句话或简短介绍，支持换行" />
-          <div class="adv-btns">
-            <button type="button" class="btn btn-primary btn-sm" :disabled="savingPublicDisplay" @click="savePublicDisplay">保存名称与简介</button>
-          </div>
-        </div>
-
         <!-- 已发布管理 -->
         <template v-if="latestLoaded && published">
           <div class="adv-group">
@@ -347,6 +360,7 @@ const fileInputs = ref({});
 // 渐进披露：版本卡展开态、高级折叠态、弹层
 const openVer = ref(null);
 const advOpen = ref(false);
+const infoOpen = ref(false);
 const showApi = ref(false);
 const showPubNotes = ref(false);
 

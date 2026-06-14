@@ -59,8 +59,8 @@
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7"><circle cx="12" cy="12" r="3" /><path d="M19 12a7 7 0 0 0-.1-1l2-1.5-2-3.5-2.4 1a7 7 0 0 0-1.7-1l-.4-2.5h-4l-.4 2.5a7 7 0 0 0-1.7 1l-2.4-1-2 3.5 2 1.5a7 7 0 0 0 0 2l-2 1.5 2 3.5 2.4-1a7 7 0 0 0 1.7 1l.4 2.5h4l.4-2.5a7 7 0 0 0 1.7-1l2.4 1 2-3.5-2-1.5a7 7 0 0 0 .1-1z" /></svg>
         </span>
         <div class="adv-t">
-          <h3>库设置</h3>
-          <p>标识 / 展示名 / 简介 / 删除库 — 默认收起</p>
+          <h3>基本信息</h3>
+          <p>标识 / 展示名 / 简介 / 对外接口 — 默认收起</p>
         </div>
         <svg class="chev" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M6 9l6 6 6-6" /></svg>
       </div>
@@ -113,10 +113,6 @@
           <p class="settings-note">公开页为卡片网格展示简介与版本；含子目录时可进入文件夹浏览或打包 ZIP。</p>
         </template>
 
-        <div class="danger-zone">
-          <span class="dz-t"><b>删除资源库</b> — 连同全部文件不可恢复</span>
-          <button type="button" class="btn btn-danger btn-sm" @click="confirmDeleteLibrary">删除资源库…</button>
-        </div>
       </div>
     </div>
 
@@ -274,6 +270,26 @@
       </transition-group>
     </template>
     <p v-if="!pageLoading && !items.length" class="empty-hint">暂无文件，请上传。</p>
+
+    <!-- 危险操作：与基本信息分开，置于页面底部 -->
+    <div class="adv danger-adv" :class="{ open: dangerOpen }">
+      <div class="adv-head" @click="dangerOpen = !dangerOpen">
+        <span class="adv-ico danger-ico">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M10.3 3.9 1.8 18a2 2 0 0 0 1.7 3h17a2 2 0 0 0 1.7-3L13.7 3.9a2 2 0 0 0-3.4 0z" /><path d="M12 9v4M12 17h.01" /></svg>
+        </span>
+        <div class="adv-t">
+          <h3>危险操作</h3>
+          <p>删除资源库 — 不可恢复，默认收起</p>
+        </div>
+        <svg class="chev" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M6 9l6 6 6-6" /></svg>
+      </div>
+      <div class="adv-body">
+        <div class="danger-zone">
+          <span class="dz-t"><b>删除资源库</b> — 连同全部文件不可恢复</span>
+          <button type="button" class="btn btn-danger btn-sm" @click="confirmDeleteLibrary">删除资源库…</button>
+        </div>
+      </div>
+    </div>
   </div>
 </template>
 
@@ -310,6 +326,7 @@ const uploadPct = ref(null);
 const browsePath = ref('');
 const folderBrowse = ref(false);
 const advOpen = ref(false);
+const dangerOpen = ref(false);
 const openId = ref(null);
 const uploadRef = ref(null);
 
