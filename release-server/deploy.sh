@@ -75,19 +75,25 @@ nginx_main_conf_path() {
 # 解析域名：DOMAIN → hostname -f（非保留名）→ 空
 release_hub_resolve_domain() {
   DOMAIN_RESOLVED="$(echo "${DOMAIN:-}" | sed 's/^[[:space:]]*//;s/[[:space:]]*$//')"
-  if [ -z "$DOMAIN_RESOLVED" ]; then
-    local HFN
-    HFN="$(hostname -f 2>/dev/null || true)"
-    if [ -n "$HFN" ] && [ "$HFN" != "localhost" ] && [[ "$HFN" == *.* ]]; then
-      if ! domain_is_nonpublic_hostname "$HFN"; then
-        DOMAIN_RESOLVED="$HFN"
-        echo "▸ 使用 hostname -f 作为域名: $DOMAIN_RESOLVED"
-      else
-        echo "⚠ hostname -f「$HFN」为内网保留名，已忽略；请设置 DOMAIN="
-      fi
-    fi
-  else
+  if [ -n "$DOMAIN_RESOLVED" ]; then
     echo "▸ 使用 DOMAIN=$DOMAIN_RESOLVED"
+    return 0
+  fi
+  # 回读上次持久化的 DOMAIN：裸 bash deploy.sh（无 DOMAIN 环境变量、hostname -f 为 .local 内网名）时不丢主域 / 上传分流
+  DOMAIN_RESOLVED="$(env_read_key "$INSTALL_DIR/.env" DOMAIN)"
+  if [ -n "$DOMAIN_RESOLVED" ]; then
+    echo "▸ 从 .env 读取 DOMAIN=$DOMAIN_RESOLVED"
+    return 0
+  fi
+  local HFN
+  HFN="$(hostname -f 2>/dev/null || true)"
+  if [ -n "$HFN" ] && [ "$HFN" != "localhost" ] && [[ "$HFN" == *.* ]]; then
+    if ! domain_is_nonpublic_hostname "$HFN"; then
+      DOMAIN_RESOLVED="$HFN"
+      echo "▸ 使用 hostname -f 作为域名: $DOMAIN_RESOLVED"
+    else
+      echo "⚠ hostname -f「$HFN」为内网保留名，已忽略；请设置 DOMAIN="
+    fi
   fi
 }
 
@@ -110,9 +116,13 @@ resolve_upload_domain() {
   fi
   local explicit
   explicit="$(echo "${UPLOAD_DOMAIN:-}" | sed 's/^[[:space:]]*//;s/[[:space:]]*$//')"
+  if [ -z "$explicit" ]; then
+    explicit="$(env_read_key "$INSTALL_DIR/.env" UPLOAD_DOMAIN)"
+    [ -n "$explicit" ] && echo "▸ 从 .env 读取 UPLOAD_DOMAIN=$explicit"
+  fi
   if [ -n "$explicit" ]; then
     UPLOAD_DOMAIN_RESOLVED="$explicit"
-    echo "▸ 上传子域: $UPLOAD_DOMAIN_RESOLVED（UPLOAD_DOMAIN）"
+    echo "▸ 上传子域: $UPLOAD_DOMAIN_RESOLVED"
     return 0
   fi
   if [ -n "$DOMAIN_RESOLVED" ] && ! domain_is_nonpublic_hostname "$DOMAIN_RESOLVED"; then
@@ -134,6 +144,13 @@ env_upsert() {
   else
     echo "${key}=${val}" >> "$file"
   fi
+}
+
+# 从 .env 读取某键值（首个匹配，去空白）；文件/键不存在回空
+env_read_key() {
+  local file="$1" key="$2"
+  [ -f "$file" ] || return 0
+  sed -n "s|^${key}=||p" "$file" | head -1 | sed 's/^[[:space:]]*//;s/[[:space:]]*$//'
 }
 
 ensure_upload_env_in_file() {
@@ -709,9 +726,6 @@ PORT=$PORT
 MAX_UPLOAD_MB=$MAX_UPLOAD_MB_DEFAULT
 TEMP_TRANSFER_MAX_FILE_SIZE_MB=$MAX_UPLOAD_MB_DEFAULT
 EOF
-  if [ -n "$UPLOAD_DOMAIN_RESOLVED" ]; then
-    echo "# UPLOAD_DOMAIN=$UPLOAD_DOMAIN_RESOLVED（大文件上传分流子域，浏览器构建见 VITE_UPLOAD_API_ORIGIN）" >> "$ENV_FILE"
-  fi
   echo "✓ 配置文件已生成: $ENV_FILE（BASE_URL=$BASE_URL_VAL）"
 else
   echo "✓ 配置文件已存在，跳过: $ENV_FILE"
@@ -728,6 +742,10 @@ else
     echo "  提示：当前为 HTTP。若 BASE_URL 非 http://$DOMAIN_RESOLVED${NGINX_PREFIX_SLUG:+/$NGINX_PREFIX_SLUG}，请在「设置」中修改或编辑 $ENV_FILE 后: pm2 restart $SERVICE_NAME"
   fi
 fi
+
+# 持久化域名，供未来裸 bash deploy.sh 回读（保住主域 + 上传分流，避免回落 _default / 丢分流）
+if [ -n "$DOMAIN_RESOLVED" ]; then env_upsert "$ENV_FILE" "DOMAIN" "$DOMAIN_RESOLVED" || true; fi
+if [ -n "$UPLOAD_DOMAIN_RESOLVED" ]; then env_upsert "$ENV_FILE" "UPLOAD_DOMAIN" "$UPLOAD_DOMAIN_RESOLVED" || true; fi
 
 # ── 安装依赖 ──────────────────────────────
 echo "▸ 安装依赖..."
