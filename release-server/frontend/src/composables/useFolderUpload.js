@@ -122,19 +122,6 @@ export async function pickDirectoryIfSupported() {
   }
 }
 
-export async function pickViaWebkitDirectory(inputEl) {
-  if (!inputEl) return [];
-  const prev = inputEl.webkitdirectory;
-  inputEl.webkitdirectory = true;
-  inputEl.multiple = true;
-  try {
-    return await pickFilesWithInput(inputEl);
-  } finally {
-    if (!prev) inputEl.removeAttribute('webkitdirectory');
-    else inputEl.webkitdirectory = true;
-  }
-}
-
 /** 点击上传区：先尝试目录选择器，否则多文件 input */
 export async function pickOnZoneClick(fileInputRef) {
   if (typeof window.showDirectoryPicker === 'function') {
@@ -152,11 +139,4 @@ export function describeUploadBatch(items) {
   const roots = new Set(items.map(it => it.relativePath.split('/')[0]).filter(Boolean));
   const rootName = roots.size === 1 ? [...roots][0] : '多个文件夹';
   return { label: `文件夹结构 · ${n} 个文件（${rootName}）`, isFolder: true, rootName };
-}
-
-export function appendToFormData(formData, items, fileField = 'files') {
-  for (const it of items) {
-    const name = it.relativePath || it.file.name;
-    formData.append(fileField, it.file, name);
-  }
 }
