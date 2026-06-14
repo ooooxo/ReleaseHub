@@ -66,6 +66,7 @@
         <div v-else-if="uploadPct === -1" class="prog indet">
           <span class="prog-txt">上传中（无法计算进度）…</span>
         </div>
+        <button v-if="uploading" type="button" class="btn btn-sm btn-ghost" @click="cancelUpload">取消</button>
 
         <p class="hint sm note">上传完成后立即生成分享链与倒计时。</p>
       </div>
@@ -76,10 +77,10 @@
 <script setup>
 import { ref, onMounted } from 'vue';
 import { useRouter } from 'vue-router';
-import { api, uploadWithProgress } from '@/api/client';
+import { api, uploadTemp } from '@/api/client';
 import { useToast } from '@/composables/useToast';
 import FolderAwareDropzone from '@/components/FolderAwareDropzone.vue';
-import { appendToFormData, describeUploadBatch } from '@/composables/useFolderUpload';
+import { describeUploadBatch } from '@/composables/useFolderUpload';
 
 const router = useRouter();
 const { toast } = useToast();
@@ -91,6 +92,7 @@ const loadError = ref('');
 
 const ttlMinutes = ref(1440);
 const uploading = ref(false);
+const uploadAbort = ref(null);
 const uploadPct = ref(/** @type {number | null} */ (null));
 function formatTtl(m) {
   if (m === 1440) return '24 小时';
@@ -128,43 +130,25 @@ async function loadAllowed() {
 
 async function doUpload(list, desc) {
   if (!list?.length || loadError.value) return;
-  uploading.value = true;
-  uploadPct.value = 0;
   const isFolder = list.length > 1 || list.some(it => it.relativePath.includes('/'));
   if (isFolder && list.length > 100) {
     toast('临时文件夹一次最多 100 个文件', 'error');
-    uploading.value = false;
-    uploadPct.value = null;
     return;
   }
+  const ctrl = new AbortController();
+  uploadAbort.value = ctrl;
+  uploading.value = true;
+  uploadPct.value = 0;
   try {
-    let lastData = null;
-    if (isFolder) {
-      const fd = new FormData();
-      appendToFormData(fd, list, 'files');
-      fd.append('ttlMinutes', String(ttlMinutes.value));
-      if (desc?.rootName) fd.append('folderName', desc.rootName);
-      lastData = await uploadWithProgress({
-        method: 'POST',
-        path: '/api/temp-transfer/upload',
-        formData: fd,
-        onProgress: n => {
-          uploadPct.value = n;
-        },
-      });
-    } else {
-      const fd = new FormData();
-      fd.append('file', list[0].file);
-      fd.append('ttlMinutes', String(ttlMinutes.value));
-      lastData = await uploadWithProgress({
-        method: 'POST',
-        path: '/api/temp-transfer/upload',
-        formData: fd,
-        onProgress: n => {
-          uploadPct.value = n;
-        },
-      });
-    }
+    const lastData = await uploadTemp({
+      items: list,
+      ttlMinutes: ttlMinutes.value,
+      folderName: desc?.rootName,
+      onProgress: n => {
+        uploadPct.value = n;
+      },
+      signal: ctrl.signal,
+    });
     toast(desc?.isFolder ? `已创建临时文件夹（${desc.label}）` : '已创建临时文件');
     if (lastData?.id) {
       router.push(`/temp-transfer/${encodeURIComponent(lastData.id)}`);
@@ -172,12 +156,18 @@ async function doUpload(list, desc) {
       router.push({ path: '/', hash: '#temp-hub' });
     }
   } catch (e) {
-    toast(e.message || '上传失败', 'error');
+    if (e.name === 'AbortError' || e.aborted) toast('已暂停 · 重传同名文件可断点续传');
+    else toast(e.message || '上传失败', 'error');
   } finally {
     uploading.value = false;
     uploadPct.value = null;
     pickedName.value = '';
+    uploadAbort.value = null;
   }
+}
+
+function cancelUpload() {
+  if (uploadAbort.value) uploadAbort.value.abort();
 }
 
 onMounted(() => {

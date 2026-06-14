@@ -645,8 +645,9 @@ function registerRoutes(app) {
   });
 
   app.get('/api/system', auth, (req, res) => {
+    const uploadResumable = !!CONFIG.UPLOAD_RESUMABLE;
     if (typeof fs.statfsSync !== 'function') {
-      return res.json({ disk: null });
+      return res.json({ disk: null, uploadResumable });
     }
     try {
       const p = CONFIG.RELEASES_DIR;
@@ -657,9 +658,9 @@ function registerRoutes(app) {
       const bavail = Number(s.bavail != null ? s.bavail : s.bfree);
       const total = blocks * bs;
       const free = bavail * bs;
-      res.json({ disk: { total, free, used: total - free } });
+      res.json({ disk: { total, free, used: total - free }, uploadResumable });
     } catch {
-      res.json({ disk: null });
+      res.json({ disk: null, uploadResumable });
     }
   });
 

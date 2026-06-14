@@ -50,6 +50,7 @@
         <span class="prog-txt">{{ uploadPct }}%</span>
       </div>
       <div v-else-if="uploadPct === -1" class="prog-txt indet">上传中（无法计算进度）…</div>
+      <button v-if="uploading" type="button" class="btn btn-sm btn-ghost" @click="cancelUpload">取消</button>
     </div>
 
     <!-- 库设置：折叠区，位于投放区下方、文件区上方 -->
@@ -296,11 +297,11 @@
 <script setup>
 import { ref, computed, watch, reactive } from 'vue';
 import { useRoute, useRouter } from 'vue-router';
-import { api, uploadWithProgress } from '@/api/client';
+import { api, uploadResource } from '@/api/client';
 import { useToast } from '@/composables/useToast';
 import ShareLinkRow from '@/components/ShareLinkRow.vue';
 import FolderAwareDropzone from '@/components/FolderAwareDropzone.vue';
-import { appendToFormData, describeUploadBatch } from '@/composables/useFolderUpload';
+import { describeUploadBatch } from '@/composables/useFolderUpload';
 import { listDirectoryLevel, breadcrumbSegments, encodePathForUrl } from '@/utils/file-tree';
 import { suggestedPublicBaseFromVite } from '@/utils/public-url';
 
@@ -595,54 +596,50 @@ async function confirmDeleteLibrary() {
   }
 }
 
-const UPLOAD_BATCH = 50;
+const uploadAbort = ref(null);
 
 async function doUploadItems(uploadItems) {
   if (!uploadItems?.length || pageLoading.value) return;
   const desc = describeUploadBatch(uploadItems);
+  const ctrl = new AbortController();
+  uploadAbort.value = ctrl;
   uploading.value = true;
   uploadPct.value = 0;
-  let totalUploaded = 0;
-  let failed = 0;
   try {
-    for (let i = 0; i < uploadItems.length; i += UPLOAD_BATCH) {
-      const batch = uploadItems.slice(i, i + UPLOAD_BATCH);
-      const fd = new FormData();
-      appendToFormData(fd, batch);
-      const data = await uploadWithProgress({
-        method: 'POST',
-        path: `/api/resources/${encodeURIComponent(libraryName.value)}/upload`,
-        formData: fd,
-        onProgress: pct => {
-          uploadPct.value = pct < 0 ? -1 : pct;
-        },
-      });
-      const uploaded = data?.uploaded || [];
-      totalUploaded += uploaded.length;
-      for (const u of uploaded) {
-        const e = enrichItem(u);
-        const ix = items.value.findIndex(x => x.fileName === e.fileName);
-        if (ix >= 0) items.value.splice(ix, 1);
-        items.value.push(e);
-        itemEdits[u.id] = {
-          displayName: u.displayName || '',
-          version: u.version || '',
-          description: u.description || '',
-        };
-      }
+    const data = await uploadResource({
+      name: libraryName.value,
+      items: uploadItems,
+      onProgress: pct => {
+        uploadPct.value = pct < 0 ? -1 : pct;
+      },
+      signal: ctrl.signal,
+    });
+    const uploaded = data?.uploaded || [];
+    for (const u of uploaded) {
+      const e = enrichItem(u);
+      const ix = items.value.findIndex(x => x.fileName === e.fileName);
+      if (ix >= 0) items.value.splice(ix, 1);
+      items.value.push(e);
+      itemEdits[u.id] = {
+        displayName: u.displayName || '',
+        version: u.version || '',
+        description: u.description || '',
+      };
     }
     items.value.sort((a, b) => a.fileName.localeCompare(b.fileName, undefined, { numeric: true }));
-    const msg =
-      failed > 0
-        ? `${desc.label}：成功 ${totalUploaded}，失败 ${failed}`
-        : `${desc.label}：已上传 ${totalUploaded} 个文件`;
-    toast(msg);
+    toast(`${desc.label}：已上传 ${uploaded.length} 个文件`);
   } catch (e) {
-    toast(e.message || '上传失败', 'error');
+    if (e.name === 'AbortError' || e.aborted) toast('已暂停 · 重传同名文件可断点续传');
+    else toast(e.message || '上传失败', 'error');
   } finally {
     uploading.value = false;
     uploadPct.value = null;
+    uploadAbort.value = null;
   }
+}
+
+function cancelUpload() {
+  if (uploadAbort.value) uploadAbort.value.abort();
 }
 
 function onUploadItems(list) {

@@ -84,7 +84,22 @@ NGINX_PREFIX= bash deploy.sh   # 整站根路径 /（无前缀）
 NGINX_PREFIX=custom bash deploy.sh   # 自定义前缀 /custom/
 ```
 
+### 断点续传（tus，默认开启）
+
+所有上传（应用版本 / 资源库 / 临时文件）默认走 [tus](https://tus.io) 协议**分片续传**：
+
+- **断网/刷新自动续传**：分片落盘，重传同一文件从已传 offset 继续，不再从 0 开始。客户端在 `localStorage` 按 `文件名|大小|修改时间|目标` 记上传 id（轻指纹，不做内容哈希 / 秒传）。
+- **并发 + 重试**：多文件/文件夹并发上传（默认 3 路），单分片失败指数退避重试。
+- **过墙**：分片默认 **8MB**，远小于 100M，故大文件也可走 Cloudflare 橙云主域，**无需**下方的上传子域分流。
+- **暂停/继续**：上传中点「取消」即暂停；重新拖入同一文件即从断点继续。
+
+环境变量（可选）：`UPLOAD_RESUMABLE`（默认 `1`，设 `0` 回落旧整包上传，前后端均自动切换）、`UPLOADS_INCOMPLETE_DIR`（未完成分片暂存目录，默认与 `releases/` 同级的 `.uploads-incomplete/`）、`UPLOAD_INCOMPLETE_TTL_HOURS`（未完成上传过期小时数，默认 **24**，到期定时清扫）。单文件大小上限仍由 `MAX_UPLOAD_MB` / `TEMP_TRANSFER_MAX_FILE_SIZE_MB` 控制。
+
+> Nginx 子路径/反代请在上传 `location` 设 `proxy_request_buffering off` 并转发 `X-Forwarded-*`（详见 `nginx.conf`）。临时文件「文件夹」上传由前端在分片全部完成后调用 `POST /api/temp-transfer/commit` 组装为一条文件夹记录。
+
 ### 大文件上传分流（绕过 Cloudflare 等约 100MB 限制）
+
+> 启用上面的断点续传后，分片即可走主域橙云，此分流**通常不再需要**；仅在 `UPLOAD_RESUMABLE=0`（旧整包上传）时才需要。
 
 在设置 `DOMAIN` 且未设 `UPLOAD_SPLIT=0` 时，`deploy.sh` 会：
 

@@ -9,6 +9,7 @@ const { registerRoutes } = require('./lib/routes');
 const { resolveReleaseFile } = require('./lib/releases');
 const { getTempTransferStore } = require('./lib/temp-transfer/instance');
 const { startTempTransferSweeper } = require('./lib/temp-transfer/sweeper');
+const { registerResumableUpload, startUploadGc } = require('./lib/upload/tus');
 
 const app = express();
 const PORT = parseInt(process.env.PORT, 10) || 3721;
@@ -18,6 +19,11 @@ app.use(express.json());
 
 /** 先注册含 GET /releases/:app/latest.json 的 API/路由，再挂 /releases 静态，否则 latest.json 会直出磁盘、无法按 BASE_URL 重灌 */
 registerRoutes(app);
+
+/** 断点续传（tus）：须在静态/SPA catch-all 之前挂，保证 HEAD/PATCH 不被 GET '*' 拦截 */
+if (CONFIG.UPLOAD_RESUMABLE) {
+  registerResumableUpload(app);
+}
 
 app.use('/releases', express.static(CONFIG.RELEASES_DIR));
 
@@ -73,6 +79,10 @@ app.listen(PORT, () => {
   console.log(`🚀 数据分发控制台 running at http://localhost:${PORT}`);
   console.log(`📁 Releases dir: ${CONFIG.RELEASES_DIR}`);
   console.log(`📚 Resource libraries dir: ${CONFIG.RESOURCE_LIBRARIES_DIR}`);
+  if (CONFIG.UPLOAD_RESUMABLE) {
+    startUploadGc();
+    console.log(`📦 Resumable upload (tus) enabled · incomplete dir: ${CONFIG.UPLOADS_INCOMPLETE_DIR}`);
+  }
   if (CONFIG.TEMP_TRANSFER?.enabled) {
     try {
       const store = getTempTransferStore();

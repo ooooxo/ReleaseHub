@@ -146,6 +146,14 @@
                 <span class="prog-txt">{{ uploadProgress[v.version] }}%</span>
               </div>
               <div v-else-if="uploadProgress[v.version] === -1" class="prog-indet">上传中（无法计算进度）…</div>
+              <button
+                v-if="uploadProgress[v.version] != null"
+                type="button"
+                class="btn btn-sm btn-ghost"
+                @click="cancelUpload(v.version)"
+              >
+                取消
+              </button>
             </div>
 
             <!-- 文件列表 -->
@@ -318,7 +326,7 @@
 <script setup>
 import { ref, computed, watch } from 'vue';
 import { useRoute, useRouter } from 'vue-router';
-import { api, uploadWithProgress } from '@/api/client';
+import { api, uploadWithProgress, uploadAppVersion } from '@/api/client';
 import { useToast } from '@/composables/useToast';
 import ShareLinkRow from '@/components/ShareLinkRow.vue';
 import { joinReleaseArtifactUrl, suggestedPublicBaseFromVite } from '@/utils/public-url';
@@ -355,6 +363,7 @@ const newVerErr = ref('');
 const creatingVer = ref(false);
 const dragVer = ref(null);
 const uploadProgress = ref({});
+const uploadAborts = ref({});
 const fileInputs = ref({});
 
 // 渐进披露：版本卡展开态、高级折叠态、弹层
@@ -826,27 +835,39 @@ async function onDrop(ev, ver) {
 }
 
 async function doUpload(ver, files) {
-  const fd = new FormData();
-  for (const f of files) fd.append('files', f);
+  const items = Array.from(files, f => ({ file: f, relativePath: f.webkitRelativePath || f.name }));
+  if (!items.length) return;
+  const ctrl = new AbortController();
+  uploadAborts.value = { ...uploadAborts.value, [ver]: ctrl };
   uploadProgress.value = { ...uploadProgress.value, [ver]: 0 };
   try {
-    await uploadWithProgress({
-      method: 'POST',
-      path: `/api/apps/${encodeURIComponent(appName.value)}/versions/${encodeURIComponent(ver)}/upload`,
-      formData: fd,
+    await uploadAppVersion({
+      app: appName.value,
+      version: ver,
+      items,
       onProgress: pct => {
         uploadProgress.value = { ...uploadProgress.value, [ver]: pct < 0 ? -1 : pct };
       },
+      signal: ctrl.signal,
     });
     toast('上传完成');
     await loadVersions();
   } catch (e) {
-    toast(e.message || '上传失败', 'error');
+    if (e.name === 'AbortError' || e.aborted) toast('已暂停 · 重传同名文件可断点续传');
+    else toast(e.message || '上传失败', 'error');
   } finally {
     const next = { ...uploadProgress.value };
     delete next[ver];
     uploadProgress.value = next;
+    const na = { ...uploadAborts.value };
+    delete na[ver];
+    uploadAborts.value = na;
   }
+}
+
+function cancelUpload(ver) {
+  const c = uploadAborts.value[ver];
+  if (c) c.abort();
 }
 
 async function createVersion() {
