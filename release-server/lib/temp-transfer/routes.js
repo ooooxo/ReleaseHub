@@ -27,8 +27,13 @@ function publicBase() {
   return CONFIG.BASE_URL.replace(/\/$/, '');
 }
 
+function downloadBase() {
+  return CONFIG.DOWNLOAD_BASE_URL.replace(/\/$/, '');
+}
+
 function enrichRecordPublic(rec) {
   const base = publicBase();
+  const dlBase = downloadBase();
   const t = encodeURIComponent(rec.token);
   if (rec.kind === 'folder') {
     return {
@@ -37,13 +42,13 @@ function enrichRecordPublic(rec) {
       landingUrl: `${base}/tt/p/${t}`,
       browseUrl: `${base}/tt/p/${t}`,
       downloadUrl: `${base}/tt/p/${t}`,
-      archiveUrl: tempArchiveUrl(base, rec.token, ''),
+      archiveUrl: tempArchiveUrl(dlBase, rec.token, ''),
     };
   }
   return {
     kind: 'file',
     landingUrl: `${base}/tt/p/${t}`,
-    downloadUrl: `${base}/tt/${t}`,
+    downloadUrl: `${dlBase}/tt/${t}`,
   };
 }
 
@@ -165,9 +170,10 @@ function registerTempTransferRoutes(app) {
         return res.status(410).type('html').send(renderTempTransferGoneHtml());
       }
       const b = publicBase();
+      const dlb = downloadBase();
       if (rec.kind === 'folder') {
         const pathQ = req.query.path != null ? String(req.query.path) : '';
-        const payload = toTempBrowsePayload(rec, b, pathQ);
+        const payload = toTempBrowsePayload(rec, b, pathQ, dlb);
         return res.type('html').send(
           renderFolderBrowseHtml({
             kind: 'temp',
@@ -182,7 +188,7 @@ function registerTempTransferRoutes(app) {
       }
       const badge = fileBadgeLabel(rec.originalName || 'file');
       const enc = encodeURIComponent(rec.token);
-      const direct = `${b}/tt/${enc}`;
+      const direct = `${dlb}/tt/${enc}`;
       const expMs = new Date(rec.expireAt).getTime();
       const name = rec.originalName || 'file';
       return res.type('html').send(
@@ -523,7 +529,7 @@ function registerTempTransferRoutes(app) {
         return res.status(400).json({ error: '非文件夹传输', code: 'NOT_FOLDER' });
       }
       const pathQ = req.query.path != null ? String(req.query.path) : '';
-      res.json(toTempBrowsePayload(loaded.rec, publicBase(), pathQ));
+      res.json(toTempBrowsePayload(loaded.rec, publicBase(), pathQ, downloadBase()));
     })().catch(e => {
       console.error('[temp-transfer] browse', e);
       res.status(500).json({ error: '查询失败' });

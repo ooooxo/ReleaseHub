@@ -74,7 +74,7 @@ function getVersions(appName) {
 }
 
 function fileUrl(appName, version, filename) {
-  return joinReleaseArtifactUrl(CONFIG.BASE_URL, appName, version, filename);
+  return joinReleaseArtifactUrl(CONFIG.DOWNLOAD_BASE_URL, appName, version, filename);
 }
 
 function getFiles(appName, version) {

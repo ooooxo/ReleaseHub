@@ -554,7 +554,7 @@ function registerRoutes(app) {
         name: f.name,
         size: f.size,
         landingHref: `${CONFIG.BASE_URL}/d/${[app, version, f.name].map(encodeURIComponent).join('/')}`,
-        directHref: `${CONFIG.BASE_URL}/${[app, version, f.name].map(encodeURIComponent).join('/')}`,
+        directHref: `${CONFIG.DOWNLOAD_BASE_URL}/${[app, version, f.name].map(encodeURIComponent).join('/')}`,
       }));
     res.type('html').send(
       renderVersionBrowserHtml({
@@ -580,7 +580,7 @@ function registerRoutes(app) {
     }
     if (!st.isFile()) return res.status(404).type('html').send(renderDownload404Html());
     const badge = fileBadgeLabel(filename);
-    const downloadHref = `${CONFIG.BASE_URL}/${[app, version, filename].map(encodeURIComponent).join('/')}`;
+    const downloadHref = `${CONFIG.DOWNLOAD_BASE_URL}/${[app, version, filename].map(encodeURIComponent).join('/')}`;
     const dmeta = readAppMeta(app);
     const displayLabel =
       dmeta.displayName && String(dmeta.displayName).trim() ? String(dmeta.displayName).trim() : app;

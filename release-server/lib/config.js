@@ -43,6 +43,7 @@ const CONFIG = {
   UPLOADS_INCOMPLETE_DIR,
   UPLOAD_INCOMPLETE_TTL_HOURS,
   BASE_URL: normalizeBaseUrl(process.env.BASE_URL || 'http://localhost:3721'),
+  DOWNLOAD_BASE_URL: normalizeBaseUrl(process.env.DOWNLOAD_BASE_URL || process.env.BASE_URL || 'http://localhost:3721'),
 };
 
 if (!fs.existsSync(CONFIG.RELEASES_DIR)) {

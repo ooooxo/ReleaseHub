@@ -28,10 +28,12 @@ function tempFileDownloadUrl(base, token, relativePath) {
 
 /**
  * @param {import('./store').TransferRecord} rec
- * @param {string} base
+ * @param {string} base  browse/landing 页域名（主域）
  * @param {string} [currentPath]
+ * @param {string} [dlBase]  文件下载域名（灰云），默认同 base
  */
-function toTempBrowsePayload(rec, base, currentPath = '') {
+function toTempBrowsePayload(rec, base, currentPath = '', dlBase) {
+  const db = dlBase || base;
   const entries = (rec.entries || []).map(e => ({
     relativePath: e.relativePath,
     size: e.size,
@@ -49,18 +51,18 @@ function toTempBrowsePayload(rec, base, currentPath = '') {
     path: normPath || '',
     breadcrumbs: crumbs,
     browseUrl: tempBrowseUrl(base, rec.token, normPath || ''),
-    archiveUrl: tempArchiveUrl(base, rec.token, normPath || ''),
+    archiveUrl: tempArchiveUrl(db, rec.token, normPath || ''),
     folders: listing.folders.map(f => ({
       ...f,
       browseUrl: tempBrowseUrl(base, rec.token, f.path),
-      archiveUrl: tempArchiveUrl(base, rec.token, f.path),
+      archiveUrl: tempArchiveUrl(db, rec.token, f.path),
     })),
     files: listing.files.map(it => ({
       fileName: it.relativePath,
       displayName: it.name,
       size: it.size,
-      directHref: tempFileDownloadUrl(base, rec.token, it.relativePath),
-      landingHref: tempFileDownloadUrl(base, rec.token, it.relativePath),
+      directHref: tempFileDownloadUrl(db, rec.token, it.relativePath),
+      landingHref: tempFileDownloadUrl(db, rec.token, it.relativePath),
     })),
   };
 }

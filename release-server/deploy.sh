@@ -17,6 +17,8 @@
 #   DOMAIN         公网域名（如 www.example.com），用于主 server 块与 Let's Encrypt
 #   UPLOAD_DOMAIN  大文件上传子域（可选；未设且 DOMAIN 可用时默认为 upload.<apex>）
 #   UPLOAD_SPLIT=0 禁用上传分流（不建 upload 子域、不注入 VITE_UPLOAD_API_ORIGIN）
+#   DL_DOMAIN      下载专用子域（可选；未设且 DOMAIN 可用时默认为 dl.<apex>）
+#   DL_SPLIT=0     禁用下载分流（不建 dl 子域、不注入 DOWNLOAD_BASE_URL）
 #
 # HTTPS（Let's Encrypt + Certbot，仅在已启用 Nginx 时）：
 #   USE_HTTPS=0    不尝试证书（仅 HTTP）
@@ -39,11 +41,14 @@ HTTPS_ENABLED=0
 DOMAIN_RESOLVED=""
 UPLOAD_DOMAIN_RESOLVED=""
 UPLOAD_HTTPS_ENABLED=0
+DL_DOMAIN_RESOLVED=""
+DL_HTTPS_ENABLED=0
 MAIN_NGINX_CONF=""
 MAIN_BODY_LIMIT="${MAIN_BODY_LIMIT:-100M}"
 UPLOAD_BODY_LIMIT="${UPLOAD_BODY_LIMIT:-2G}"
 MAX_UPLOAD_MB_DEFAULT="${MAX_UPLOAD_MB:-2048}"
 UPLOAD_NGINX_CONF="/etc/nginx/conf.d/release-hub-upload.conf"
+DL_NGINX_CONF="/etc/nginx/conf.d/release-hub-dl.conf"
 
 # 是否为不适合公网访问 / Let's Encrypt 的主机名（如 mDNS 的 *.local）。返回 0=是保留名应忽略
 domain_is_nonpublic_hostname() {
@@ -130,6 +135,36 @@ resolve_upload_domain() {
     apex="$(domain_apex_from_fqdn "$DOMAIN_RESOLVED")"
     UPLOAD_DOMAIN_RESOLVED="upload.${apex}"
     echo "▸ 上传子域: $UPLOAD_DOMAIN_RESOLVED（默认 upload.<apex>）"
+  fi
+}
+
+# 下载子域：DL_SPLIT=0 禁用；DL_DOMAIN 显式；否则 dl.<apex>
+resolve_dl_domain() {
+  DL_DOMAIN_RESOLVED=""
+  DL_HTTPS_ENABLED=0
+  if [ "${DL_SPLIT:-}" = "0" ]; then
+    echo "▸ 下载分流已禁用（DL_SPLIT=0）"
+    return 0
+  fi
+  if [ "$USE_NGINX_RESOLVED" != "1" ]; then
+    return 0
+  fi
+  local explicit
+  explicit="$(echo "${DL_DOMAIN:-}" | sed 's/^[[:space:]]*//;s/[[:space:]]*$//')"
+  if [ -z "$explicit" ]; then
+    explicit="$(env_read_key "$INSTALL_DIR/.env" DL_DOMAIN)"
+    [ -n "$explicit" ] && echo "▸ 从 .env 读取 DL_DOMAIN=$explicit"
+  fi
+  if [ -n "$explicit" ]; then
+    DL_DOMAIN_RESOLVED="$explicit"
+    echo "▸ 下载子域: $DL_DOMAIN_RESOLVED"
+    return 0
+  fi
+  if [ -n "$DOMAIN_RESOLVED" ] && ! domain_is_nonpublic_hostname "$DOMAIN_RESOLVED"; then
+    local apex
+    apex="$(domain_apex_from_fqdn "$DOMAIN_RESOLVED")"
+    DL_DOMAIN_RESOLVED="dl.${apex}"
+    echo "▸ 下载子域: $DL_DOMAIN_RESOLVED（默认 dl.<apex>）"
   fi
 }
 
@@ -298,6 +333,137 @@ issue_upload_letsencrypt() {
     return 1
   fi
   echo "⚠ 上传子域 certbot 失败（$cert_exit），大文件上传将使用 HTTP: http://$dom"
+  return 1
+}
+
+# 下载子域 Nginx：根路径反代 Node，绕过主域 CF CDN 限速
+write_dl_server_block_http() {
+  local dom="$1"
+  [ -z "$dom" ] && return 1
+  echo "▸ 写入下载子域 Nginx（HTTP）: $DL_NGINX_CONF（server_name $dom）"
+  sudo tee "$DL_NGINX_CONF" > /dev/null <<NGX
+# Release Hub — 下载专用子域（建议 Cloudflare DNS only / 灰云）
+server {
+    listen 80;
+    listen [::]:80;
+    server_name ${dom};
+
+    location / {
+        proxy_pass http://127.0.0.1:${PORT};
+        proxy_http_version 1.1;
+        proxy_set_header Upgrade \$http_upgrade;
+        proxy_set_header Connection "upgrade";
+        proxy_set_header Host \$host;
+        proxy_set_header X-Real-IP \$remote_addr;
+        proxy_set_header X-Forwarded-For \$proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto \$scheme;
+    }
+}
+NGX
+}
+
+write_dl_server_block_https() {
+  local dom="$1"
+  [ -z "$dom" ] && return 1
+  echo "▸ 写入下载子域 Nginx（HTTPS）: $DL_NGINX_CONF（server_name $dom）"
+  sudo tee "$DL_NGINX_CONF" > /dev/null <<NGX
+# Release Hub — 下载专用子域（建议 Cloudflare DNS only / 灰云）
+server {
+    listen 80;
+    listen [::]:80;
+    server_name ${dom};
+
+    return 301 https://\$host\$request_uri;
+}
+
+server {
+    listen 443 ssl http2;
+    listen [::]:443 ssl http2;
+    server_name ${dom};
+
+    ssl_certificate     /etc/letsencrypt/live/${dom}/fullchain.pem;
+    ssl_certificate_key /etc/letsencrypt/live/${dom}/privkey.pem;
+    include /etc/letsencrypt/options-ssl-nginx.conf;
+    ssl_dhparam /etc/letsencrypt/ssl-dhparams.pem;
+
+    location / {
+        proxy_pass http://127.0.0.1:${PORT};
+        proxy_http_version 1.1;
+        proxy_set_header Upgrade \$http_upgrade;
+        proxy_set_header Connection "upgrade";
+        proxy_set_header Host \$host;
+        proxy_set_header X-Real-IP \$remote_addr;
+        proxy_set_header X-Forwarded-For \$proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto \$scheme;
+    }
+}
+NGX
+  DL_HTTPS_ENABLED=1
+}
+
+refresh_dl_nginx_block() {
+  [ -z "$DL_DOMAIN_RESOLVED" ] && return 0
+  if sudo test -f "/etc/letsencrypt/live/${DL_DOMAIN_RESOLVED}/fullchain.pem"; then
+    write_dl_server_block_https "$DL_DOMAIN_RESOLVED"
+  else
+    write_dl_server_block_http "$DL_DOMAIN_RESOLVED"
+  fi
+}
+
+# 为下载子域申请 Let's Encrypt（certonly）。成功返回 0
+issue_dl_letsencrypt() {
+  local dom="$1"
+  [ -z "$dom" ] && return 1
+  if ! command -v certbot &>/dev/null; then
+    echo "⚠ 未安装 certbot，跳过下载子域 HTTPS"
+    return 1
+  fi
+  if sudo test -f "/etc/letsencrypt/live/${dom}/fullchain.pem"; then
+    echo "▸ 下载子域证书已存在: $dom"
+    refresh_dl_nginx_block
+    return 0
+  fi
+  if ! dns_resolves_to_public_ip "$dom" "$PUBLIC_IP"; then
+    echo "⚠ 下载子域 DNS 未指向本机 $PUBLIC_IP，跳过 certbot（$dom）"
+    echo "  请在 Cloudflare 将 $dom 设为 DNS only（灰云）并添加 A 记录后重跑 deploy.sh"
+    return 1
+  fi
+  [ -z "$CERTBOT_EMAIL_VAL" ] && CERTBOT_EMAIL_VAL="admin@${dom}"
+  echo "▸ 下载子域 DNS 预检通过（$dom → $PUBLIC_IP）"
+  echo "▸ certbot 下载子域 dry-run: $dom"
+  set +e
+  sudo certbot certonly --nginx \
+    --dry-run \
+    --non-interactive \
+    --agree-tos \
+    --email "$CERTBOT_EMAIL_VAL" \
+    -d "$dom"
+  local dry_exit=$?
+  set -e
+  if [ "$dry_exit" -ne 0 ]; then
+    echo "⚠ 下载子域 certbot dry-run 失败（$dry_exit），保持 HTTP。可稍后: sudo certbot certonly --nginx -d $dom"
+    return 1
+  fi
+  echo "▸ 下载子域正式申请证书: $dom"
+  set +e
+  sudo certbot certonly --nginx \
+    --non-interactive \
+    --agree-tos \
+    --email "$CERTBOT_EMAIL_VAL" \
+    -d "$dom"
+  local cert_exit=$?
+  set -e
+  if [ "$cert_exit" -eq 0 ]; then
+    refresh_dl_nginx_block
+    if sudo nginx -t; then
+      sudo systemctl reload nginx
+      echo "✓ 下载子域 HTTPS 已启用: https://$dom"
+      return 0
+    fi
+    echo "⚠ 下载子域证书已签发但 nginx -t 失败，请检查 $DL_NGINX_CONF"
+    return 1
+  fi
+  echo "⚠ 下载子域 certbot 失败（$cert_exit），下载将使用 HTTP: http://$dom"
   return 1
 }
 
@@ -538,6 +704,7 @@ fi
 # ── 域名解析（Nginx / BASE_URL / HTTPS 共用）──
 release_hub_resolve_domain
 resolve_upload_domain
+resolve_dl_domain
 MAIN_NGINX_CONF="$(nginx_main_conf_path "$DOMAIN_RESOLVED")"
 echo "▸ 主 Nginx 配置文件: $MAIN_NGINX_CONF"
 
@@ -562,6 +729,11 @@ if [ "$USE_NGINX_RESOLVED" = "1" ]; then
       refresh_upload_nginx_block
     else
       sudo rm -f "$UPLOAD_NGINX_CONF" 2>/dev/null || true
+    fi
+    if [ -n "$DL_DOMAIN_RESOLVED" ]; then
+      refresh_dl_nginx_block
+    else
+      sudo rm -f "$DL_NGINX_CONF" 2>/dev/null || true
     fi
     if sudo nginx -t; then
       sudo systemctl enable nginx
@@ -658,6 +830,9 @@ else
               if [ -n "$UPLOAD_DOMAIN_RESOLVED" ]; then
                 issue_upload_letsencrypt "$UPLOAD_DOMAIN_RESOLVED" || true
               fi
+              if [ -n "$DL_DOMAIN_RESOLVED" ]; then
+                issue_dl_letsencrypt "$DL_DOMAIN_RESOLVED" || true
+              fi
             else
               echo "⚠ 写入 HTTPS 配置后 nginx -t 失败，回退为 HTTP-only 主配置"
               ensure_main_server_block
@@ -682,6 +857,15 @@ fi
 if [ "$NGINX_ENABLED" = "1" ] && [ -n "$UPLOAD_DOMAIN_RESOLVED" ] && [ "${USE_HTTPS:-}" != "0" ] \
   && [ "$UPLOAD_HTTPS_ENABLED" != "1" ]; then
   issue_upload_letsencrypt "$UPLOAD_DOMAIN_RESOLVED" || true
+  if sudo nginx -t 2>/dev/null; then
+    sudo systemctl reload nginx 2>/dev/null || true
+  fi
+fi
+
+# 下载子域 HTTPS（主域证书已存在或本次未走主域 certbot 时补试）
+if [ "$NGINX_ENABLED" = "1" ] && [ -n "$DL_DOMAIN_RESOLVED" ] && [ "${USE_HTTPS:-}" != "0" ] \
+  && [ "$DL_HTTPS_ENABLED" != "1" ]; then
+  issue_dl_letsencrypt "$DL_DOMAIN_RESOLVED" || true
   if sudo nginx -t 2>/dev/null; then
     sudo systemctl reload nginx 2>/dev/null || true
   fi
@@ -717,6 +901,15 @@ if [ ! -f "$ENV_FILE" ]; then
     BASE_URL_VAL="http://${PUBLIC_IP}:${PORT}"
   fi
 
+  DL_BASE_URL_VAL=""
+  if [ -n "$DL_DOMAIN_RESOLVED" ]; then
+    if [ "$DL_HTTPS_ENABLED" = "1" ]; then
+      DL_BASE_URL_VAL="https://${DL_DOMAIN_RESOLVED}"
+    else
+      DL_BASE_URL_VAL="http://${DL_DOMAIN_RESOLVED}"
+    fi
+  fi
+
   cat > "$ENV_FILE" <<EOF
 JWT_SECRET=$JWT_SECRET
 ADMIN_PASSWORD_HASH=$DEFAULT_HASH
@@ -726,12 +919,23 @@ PORT=$PORT
 MAX_UPLOAD_MB=$MAX_UPLOAD_MB_DEFAULT
 TEMP_TRANSFER_MAX_FILE_SIZE_MB=$MAX_UPLOAD_MB_DEFAULT
 EOF
+  if [ -n "$DL_BASE_URL_VAL" ]; then
+    echo "DOWNLOAD_BASE_URL=$DL_BASE_URL_VAL" >> "$ENV_FILE"
+  fi
   echo "✓ 配置文件已生成: $ENV_FILE（BASE_URL=$BASE_URL_VAL）"
 else
   echo "✓ 配置文件已存在，跳过: $ENV_FILE"
   if [ -n "$UPLOAD_DOMAIN_RESOLVED" ]; then
     ensure_upload_env_in_file "$ENV_FILE"
     echo "  已同步上传上限: MAX_UPLOAD_MB=$MAX_UPLOAD_MB_DEFAULT"
+  fi
+  if [ -n "$DL_DOMAIN_RESOLVED" ]; then
+    if [ "$DL_HTTPS_ENABLED" = "1" ]; then
+      env_upsert "$ENV_FILE" "DOWNLOAD_BASE_URL" "https://${DL_DOMAIN_RESOLVED}" || true
+    else
+      env_upsert "$ENV_FILE" "DOWNLOAD_BASE_URL" "http://${DL_DOMAIN_RESOLVED}" || true
+    fi
+    echo "  已同步下载域: DOWNLOAD_BASE_URL"
   fi
   if [ "$NGINX_ENABLED" = "1" ]; then
     echo "  提示：已启用 Nginx。若下载链接仍不对，请在后台「设置」中修改 BASE_URL 或编辑 $ENV_FILE 后执行: pm2 restart $SERVICE_NAME"
@@ -746,6 +950,7 @@ fi
 # 持久化域名，供未来裸 bash deploy.sh 回读（保住主域 + 上传分流，避免回落 _default / 丢分流）
 if [ -n "$DOMAIN_RESOLVED" ]; then env_upsert "$ENV_FILE" "DOMAIN" "$DOMAIN_RESOLVED" || true; fi
 if [ -n "$UPLOAD_DOMAIN_RESOLVED" ]; then env_upsert "$ENV_FILE" "UPLOAD_DOMAIN" "$UPLOAD_DOMAIN_RESOLVED" || true; fi
+if [ -n "$DL_DOMAIN_RESOLVED" ]; then env_upsert "$ENV_FILE" "DL_DOMAIN" "$DL_DOMAIN_RESOLVED" || true; fi
 
 # ── 安装依赖 ──────────────────────────────
 echo "▸ 安装依赖..."
@@ -893,6 +1098,16 @@ if [ -n "$UPLOAD_DOMAIN_RESOLVED" ]; then
   fi
   echo "  Cloudflare: 请将 ${UPLOAD_DOMAIN_RESOLVED} 设为 DNS only（灰云），主域可保持橙云"
   echo "  单文件上限: ${MAX_UPLOAD_MB_DEFAULT}MB（Node + 上传子域 Nginx ${UPLOAD_BODY_LIMIT}）"
+fi
+if [ -n "$DL_DOMAIN_RESOLVED" ]; then
+  echo ""
+  echo "  ── 下载分流（绕过主域 CF 限速）──"
+  if [ "$DL_HTTPS_ENABLED" = "1" ]; then
+    echo "  下载域: https://${DL_DOMAIN_RESOLVED}"
+  else
+    echo "  下载域（HTTP，建议尽快重跑 deploy 以签发 HTTPS）: http://${DL_DOMAIN_RESOLVED}"
+  fi
+  echo "  Cloudflare: 请将 ${DL_DOMAIN_RESOLVED} 设为 DNS only（灰云），主域可保持橙云"
 fi
 echo ""
 echo "  查看日志：pm2 logs $SERVICE_NAME"
