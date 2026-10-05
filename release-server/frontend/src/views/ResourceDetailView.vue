@@ -276,7 +276,7 @@ import TwoStepButton from '@/components/ui/TwoStepButton.vue';
 import ConfirmButton from '@/components/ui/ConfirmButton.vue';
 import { describeUploadBatch } from '@/composables/useFolderUpload';
 import { listDirectoryLevel, breadcrumbSegments, encodePathForUrl } from '@/utils/file-tree';
-import { suggestedPublicBaseFromVite } from '@/utils/public-url';
+import { usePublicBase } from '@/composables/usePublicBase';
 import { copyText } from '@/utils/copy-text';
 import { formatBytes } from '@/utils/format-bytes';
 
@@ -287,7 +287,7 @@ const uploads = useUploads();
 
 const libraryName = computed(() => decodeURIComponent(route.params.name || ''));
 const pageLoading = ref(true);
-const publicBase = ref('');
+const { publicBase, loadPublicBase } = usePublicBase();
 const meta = ref({ displayName: '', description: '' });
 const idEdit = ref('');
 const savingMeta = ref(false);
@@ -398,15 +398,6 @@ watch(openIndex, i => {
   if (i < 0 && openId.value) openId.value = null;
 });
 
-async function loadSettingsBase() {
-  try {
-    const s = await api('GET', '/api/settings');
-    publicBase.value = (s.baseUrl || '').replace(/\/$/, '') || suggestedPublicBaseFromVite();
-  } catch {
-    publicBase.value = suggestedPublicBaseFromVite();
-  }
-}
-
 function enrichItem(it) {
   const encPath = encodePathForUrl(it.fileName);
   const name = encodeURIComponent(libraryName.value);
@@ -455,7 +446,7 @@ function applyDetail(d) {
 async function loadPage() {
   pageLoading.value = true;
   try {
-    await loadSettingsBase();
+    await loadPublicBase();
     applyDetail(await api('GET', `/api/resources/${encodeURIComponent(libraryName.value)}`));
   } catch (e) {
     toast(e.message, 'error');

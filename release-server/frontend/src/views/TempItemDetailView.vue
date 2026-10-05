@@ -121,7 +121,7 @@ import { useToast } from '@/composables/useToast';
 import { formatBytes } from '@/utils/format-bytes';
 import { formatRemainingSec } from '@/utils/format-remaining';
 import ShareLinkRow from '@/components/ShareLinkRow.vue';
-import { suggestedPublicBaseFromVite } from '@/utils/public-url';
+import { usePublicBase } from '@/composables/usePublicBase';
 import { encodePathForUrl } from '@/utils/file-tree';
 
 const route = useRoute();
@@ -131,7 +131,7 @@ const { toast } = useToast();
 const pageLoading = ref(true);
 const errMsg = ref('');
 const item = ref(null);
-const publicBase = ref('');
+const { publicBase, loadPublicBase } = usePublicBase();
 
 const itemId = computed(() => {
   const id = String(route.params.id || '').trim();
@@ -204,15 +204,6 @@ const ringOffset = computed(() => {
   return RING_C * (1 - frac);
 });
 
-async function loadBase() {
-  try {
-    const s = await api('GET', '/api/settings');
-    publicBase.value = (s.baseUrl || '').replace(/\/$/, '') || suggestedPublicBaseFromVite();
-  } catch {
-    publicBase.value = suggestedPublicBaseFromVite();
-  }
-}
-
 async function load() {
   if (!itemId.value) {
     errMsg.value = '无效的 ID';
@@ -266,7 +257,7 @@ async function cancelItem() {
 
 onMounted(async () => {
   startTick();
-  await loadBase();
+  await loadPublicBase();
   await load();
 });
 

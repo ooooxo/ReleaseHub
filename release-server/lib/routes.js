@@ -156,8 +156,8 @@ function registerRoutes(app) {
     if (newName === oldName) return res.json({ success: true, name: newName });
     if (!appDirExists(oldName)) return res.status(404).json({ error: 'App 不存在' });
     if (appDirExists(newName)) return res.status(400).json({ error: '目标包名已存在' });
-    const metaDir = path.join(__dirname, '..', '.meta');
-    const notesDir = path.join(__dirname, '..', '.notes-cache');
+    const metaDir = CONFIG.META_DIR;
+    const notesDir = CONFIG.NOTES_CACHE_DIR;
     /**
      * 无 releases 子目录时，.meta / .notes-cache 下的同名 json 视为残留（删应用未清草稿、重命名中断等），自动删除以免阻塞重命名。
      */

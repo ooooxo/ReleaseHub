@@ -2,8 +2,8 @@ const fs = require('fs');
 const path = require('path');
 const CONFIG = require('./config');
 
-const META_DIR = path.join(__dirname, '..', '.meta');
-const NOTES_DIR = path.join(__dirname, '..', '.notes-cache');
+const META_DIR = CONFIG.META_DIR;
+const NOTES_DIR = CONFIG.NOTES_CACHE_DIR;
 
 function metaPath(n) {
   return path.join(META_DIR, `${n}.json`);

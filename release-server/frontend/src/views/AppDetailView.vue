@@ -333,7 +333,8 @@ import ConfirmButton from '@/components/ui/ConfirmButton.vue';
 import TwoStepButton from '@/components/ui/TwoStepButton.vue';
 import { copyText } from '@/utils/copy-text';
 import { formatBytes } from '@/utils/format-bytes';
-import { joinReleaseArtifactUrl, suggestedPublicBaseFromVite } from '@/utils/public-url';
+import { joinReleaseArtifactUrl } from '@/utils/public-url';
+import { usePublicBase } from '@/composables/usePublicBase';
 
 const route = useRoute();
 const router = useRouter();
@@ -349,7 +350,7 @@ const packageNameEdit = ref('');
 const savingPackageName = ref(false);
 const versions = ref([]);
 const notesDraft = ref({});
-const publicBase = ref('');
+const { publicBase, loadPublicBase } = usePublicBase();
 const published = ref(null);
 const latestLoaded = ref(false);
 const savingNotes = ref(false);
@@ -549,15 +550,6 @@ async function savePackageRename() {
   }
 }
 
-async function loadSettingsBase() {
-  try {
-    const s = await api('GET', '/api/settings');
-    publicBase.value = (s.baseUrl || '').replace(/\/$/, '') || suggestedPublicBaseFromVite();
-  } catch {
-    publicBase.value = suggestedPublicBaseFromVite();
-  }
-}
-
 /* 只在首次加载时标「未载入」：之后的刷新原地换数据，不让发布区闪没 */
 async function loadLatest() {
   try {
@@ -581,7 +573,7 @@ async function loadAll() {
   loading.value = true;
   latestLoaded.value = false;
   try {
-    await loadSettingsBase();
+    await loadPublicBase();
     await loadMeta();
     await loadVersions();
     await loadDrafts();

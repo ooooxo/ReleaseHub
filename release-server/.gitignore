@@ -1,5 +1,10 @@
 .env
+.meta/
 .notes-cache/
+# 数据目录：默认落在仓库内，内容属于部署实例不属于代码
+releases/
+resource-libraries/
+deploy.sh.bak.*
 temp-transfers/
 .uploads-incomplete/
 node_modules/

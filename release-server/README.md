@@ -95,6 +95,8 @@ NGINX_PREFIX=custom bash deploy.sh   # 自定义前缀 /custom/
 
 环境变量（可选）：`UPLOAD_RESUMABLE`（默认 `1`，设 `0` 回落旧整包上传，前后端均自动切换）、`UPLOADS_INCOMPLETE_DIR`（未完成分片暂存目录，默认与 `releases/` 同级的 `.uploads-incomplete/`）、`UPLOAD_INCOMPLETE_TTL_HOURS`（未完成上传过期小时数，默认 **24**，到期定时清扫）。单文件大小上限仍由 `MAX_UPLOAD_MB` / `TEMP_TRANSFER_MAX_FILE_SIZE_MB` 控制。
 
+应用元数据与说明草稿的侧车目录：`META_DIR`（默认仓库根 `.meta/`）、`NOTES_CACHE_DIR`（默认 `.notes-cache/`）。与 `RELEASES_DIR` 一样属于部署数据，可指到仓库外。
+
 > Nginx 子路径/反代请在上传 `location` 设 `proxy_request_buffering off` 并转发 `X-Forwarded-*`（详见 `nginx.conf`）。临时文件「文件夹」上传由前端在分片全部完成后调用 `POST /api/temp-transfer/commit` 组装为一条文件夹记录。
 
 ### 大文件上传分流（绕过 Cloudflare 等约 100MB 限制）
