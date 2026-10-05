@@ -690,7 +690,8 @@ async function publishVersion(ver, allowMissingSig = false) {
   try {
     if (verEdit.dirty && openVer.value === ver && !(await saveVersionNotes())) return;
     const preview = await api('GET', `/api/apps/${encodeURIComponent(appName.value)}/versions/${encodeURIComponent(ver)}/preview-release`);
-    preview.notes = notesDraft.value[ver] ?? '';
+    // 发出去的就是屏上那份：已发布版本取线上说明，其余取说明草稿（旧数据里二者可能不一致）
+    preview.notes = savedNotes(versions.value.find(x => x.version === ver));
     rewritePreviewUrls(preview, publicBase.value);
     if (repoType.value === 'tauri' && !allowMissingSig) {
       const miss = Object.entries(preview.platforms || {})
