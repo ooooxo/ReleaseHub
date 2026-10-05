@@ -18,7 +18,9 @@ const { toasts } = useToast();
 .stack {
   position: fixed;
   bottom: 24px;
-  right: 24px;
+  left: 50%;
+  transform: translateX(-50%);
+  align-items: center;
   z-index: 9999;
   display: flex;
   flex-direction: column;

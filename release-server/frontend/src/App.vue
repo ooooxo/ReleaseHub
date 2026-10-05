@@ -3,6 +3,7 @@
   <div class="app-root" :class="{ 'app-root--shelled': shelled }">
     <div v-if="shelled" class="app-shelled-wrap">
       <ServerStatusStrip v-if="showServerStrip" />
+      <UploadTray />
       <main class="app-main">
         <router-view v-slot="{ Component }">
           <transition name="fade" mode="out-in">
@@ -27,6 +28,7 @@ import { useRoute } from 'vue-router';
 import { useAuthStore } from '@/stores/auth';
 import ToastStack from '@/components/ToastStack.vue';
 import ServerStatusStrip from '@/components/ServerStatusStrip.vue';
+import UploadTray from '@/components/UploadTray.vue';
 
 const route = useRoute();
 const auth = useAuthStore();

@@ -9,6 +9,12 @@ const ResourceDetailView = () => import('@/views/ResourceDetailView.vue');
 
 const router = createRouter({
   history: createWebHistory(import.meta.env.BASE_URL),
+  // 滚动容器是 .app-main 不是 window，路由自带的滚动够不着：hash 自己 scrollIntoView（首屏未渲染时由 HomeView 加载完再滚）
+  scrollBehavior(to) {
+    if (to.hash) document.querySelector(to.hash)?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    else document.querySelector('.app-main')?.scrollTo({ top: 0 });
+    return false;
+  },
   routes: [
     { path: '/login', name: 'login', component: LoginView, meta: { guest: true } },
     { path: '/', name: 'home', component: HomeView, meta: { requiresAuth: true } },
@@ -16,12 +22,8 @@ const router = createRouter({
     { path: '/resources', redirect: { path: '/', hash: '#library-grid' } },
     { path: '/resources/:name', name: 'resource-detail', component: ResourceDetailView, meta: { requiresAuth: true } },
     { path: '/settings', name: 'settings', component: SettingsView, meta: { requiresAuth: true } },
-    {
-      path: '/temp-transfer',
-      name: 'temp-transfer',
-      component: () => import('@/views/TempTransferView.vue'),
-      meta: { requiresAuth: true },
-    },
+    // 新建临时文件已并进总览的投放格（ADR-0003 / 0006），旧地址落回那一格
+    { path: '/temp-transfer', redirect: { path: '/', hash: '#temp-hub' } },
     {
       path: '/temp-transfer/:id',
       name: 'temp-item',

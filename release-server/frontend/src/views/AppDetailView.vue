@@ -13,50 +13,74 @@
         <span class="pkg">{{ appName }}</span>
       </div>
       <div class="ab-actions">
-        <button v-if="publicBase" type="button" class="btn btn-ghost btn-sm" @click="showApi = true">
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M10 13a5 5 0 0 0 7 0l3-3a5 5 0 0 0-7-7l-1 1" /><path d="M14 11a5 5 0 0 0-7 0l-3 3a5 5 0 0 0 7 7l1-1" /></svg>
-          对外接口
-        </button>
-        <button type="button" class="btn btn-primary btn-sm" @click="showNewVer = true">
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M12 5v14M5 12h14" /></svg>
-          新建版本
-        </button>
+        <Layer v-model:open="showNewVer" :guard="!!newVerInput.trim()">
+          <template #trigger="{ toggle }">
+            <button type="button" class="btn btn-primary btn-sm" :aria-expanded="showNewVer" @click="toggle">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M12 5v14M5 12h14" /></svg>
+              新建版本
+            </button>
+          </template>
+          <form class="lform" @submit.prevent="createVersion">
+            <p class="l-title">新建版本</p>
+            <p v-if="repoType === 'tauri'" class="hint sm">须为 SemVer 2.0 三段式，如 v1.0.0</p>
+            <p v-else class="hint sm">目录名即版本标识（字母数字、点、下划线、连字符），如 <code>2.0.2</code>、<code>1.0-beta</code></p>
+            <input v-model="newVerInput" class="input" :placeholder="repoType === 'tauri' ? 'v1.0.0' : '例如 2.0.2'" autofocus />
+            <p v-if="newVerErr" class="err">{{ newVerErr }}</p>
+            <div class="row">
+              <button type="button" class="btn btn-ghost btn-sm" @click="closeNewVer">取消</button>
+              <button type="submit" class="btn btn-primary btn-sm" :disabled="creatingVer">创建</button>
+            </div>
+          </form>
+        </Layer>
       </div>
     </div>
 
-    <!-- 基本信息（包名 / 展示名 / 简介），独立于危险操作 -->
+    <!-- 基本信息：包名 / 展示名 / 简介 / 对外接口 -->
     <div class="adv info-adv" :class="{ open: infoOpen }">
-      <div class="adv-head" @click="infoOpen = !infoOpen">
+      <button type="button" class="adv-head" :aria-expanded="infoOpen" @click="infoOpen = !infoOpen">
         <span class="adv-ico">
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M12 20h9" /><path d="M16.5 3.5a2.1 2.1 0 0 1 3 3L7 19l-4 1 1-4z" /></svg>
         </span>
-        <div class="adv-t">
-          <h3>基本信息</h3>
-          <p>包名 / 展示名 / 简介</p>
-        </div>
+        <span class="adv-t">
+          <b>基本信息</b>
+          <small>包名 / 展示名 / 简介 / 对外接口</small>
+        </span>
         <svg class="chev" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M6 9l6 6 6-6" /></svg>
-      </div>
+      </button>
       <div class="adv-body">
         <div class="adv-group">
           <label class="sub-label">包名（目录与 URL；修改后 latest.json、直链与公开页路径全部变为新包名）</label>
           <div class="row-input">
             <input v-model="packageNameEdit" class="input code" spellcheck="false" :placeholder="appName" />
-            <button
-              type="button"
-              class="btn btn-primary btn-sm"
-              :disabled="savingPackageName || packageNameEdit.trim() === appName || !packageNameEdit.trim()"
-              @click="savePackageRename"
-            >
-              保存包名
-            </button>
+            <ConfirmButton
+              label="改包名"
+              :title="`包名改为「${packageNameEdit.trim()}」？`"
+              detail="releases 目录、更新清单内的 URL、公开链接中的包名段都会变化，已安装客户端按旧地址检查更新将失效。"
+              confirm-label="改包名"
+              danger
+              :busy="savingPackageName || !packageChanged"
+              btn-class="btn btn-primary btn-sm"
+              @confirm="savePackageRename"
+            />
           </div>
           <label class="sub-label">软件名（对外展示；留空则仅显示包名）</label>
-          <input v-model="displayNameEdit" class="input" :placeholder="appName" />
+          <input v-model="metaEdit.model.displayName" class="input" :placeholder="appName" />
           <label class="sub-label">软件简介（可选，显示在对外版本页；不展示包名）</label>
-          <textarea v-model="descriptionEdit" class="textarea" rows="4" placeholder="一句话或简短介绍，支持换行" />
-          <div class="adv-btns">
-            <button type="button" class="btn btn-primary btn-sm" :disabled="savingPublicDisplay" @click="savePublicDisplay">保存名称与简介</button>
-          </div>
+          <textarea v-model="metaEdit.model.description" class="textarea" rows="4" placeholder="一句话或简短介绍，支持换行" />
+          <SaveBar ref="metaBar" :dirty="metaEdit.dirty" :busy="savingMeta" @save="saveMeta" @discard="metaEdit.discard()" />
+        </div>
+
+        <div v-if="publicBase" class="adv-group">
+          <span class="field-label">对外接口</span>
+          <p class="hint sm">旧版 Tauri / 脚本继续用 <code>latest.json</code>，行为不变。</p>
+          <ShareLinkRow v-if="latestAppShortcutUrl" label="最新版本页（推荐）" :url="latestAppShortcutUrl" />
+          <ShareLinkRow v-if="publishedVersionPageUrl" label="当前发布版本页" :url="publishedVersionPageUrl" />
+          <ShareLinkRow label="latest.json" :url="latestJsonUrl" />
+          <ShareLinkRow label="JSON 摘要" :url="downloadInfoUrl" />
+          <ShareLinkRow label="直链跳转" :url="downloadRedirectUrl" />
+          <p class="hint sm">
+            <code>/app/{{ appName }}/latest</code> 302 到当前已发布目录；带 <code>?redirect=1</code> 的直链跳转到当前发布的主安装包（Tauri 排除 <code>.sig</code>）。
+          </p>
         </div>
       </div>
     </div>
@@ -67,7 +91,7 @@
         <span class="pub-label">当前发布</span>
         <div class="pub-ver">{{ published.version }}</div>
         <div class="pub-meta">
-          <template v-if="publishedPubDate">发布于 {{ fmtDate(publishedPubDate) }} · </template>{{ versions.length }} 个历史版本
+          <template v-if="published.pub_date">发布于 {{ fmtDate(published.pub_date) }} · </template>{{ versions.length }} 个历史版本
         </div>
         <div v-if="published.notes" class="pub-notes">{{ published.notes }}</div>
       </div>
@@ -76,7 +100,7 @@
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><rect x="9" y="9" width="11" height="11" rx="2" /><path d="M5 15V5a2 2 0 0 1 2-2h10" /></svg>
           复制最新版本页
         </button>
-        <button type="button" class="btn btn-ghost" @click="showPubNotes = true">编辑发布说明</button>
+        <button v-if="publishedVersionDir" type="button" class="btn btn-ghost" @click="editPublishedNotes">编辑发布说明</button>
       </div>
     </div>
     <div v-else-if="latestLoaded && !published" class="published empty-pub">
@@ -94,8 +118,22 @@
     <div v-if="loading" class="muted">加载中…</div>
     <div v-else-if="!versions.length" class="muted empty-v">还没有任何版本，点击右上角「新建版本」开始。</div>
     <div v-else class="vlist">
-      <article v-for="v in versions" :key="v.version" class="vcard" :class="{ open: openVer === v.version }">
-        <div class="vhead" @click="toggleVer(v.version)">
+      <article
+        v-for="v in versions"
+        :key="v.version"
+        :ref="el => setCardEl(v.version, el)"
+        class="vcard"
+        :class="{ open: openVer === v.version }"
+      >
+        <div
+          class="vhead"
+          role="button"
+          tabindex="0"
+          :aria-expanded="openVer === v.version"
+          @click="toggleVer(v.version)"
+          @keydown.enter.prevent="toggleVer(v.version)"
+          @keydown.space.prevent="toggleVer(v.version)"
+        >
           <span class="vnum">{{ v.version }}</span>
           <span v-if="v.isLatest" class="latest">当前最新</span>
           <div class="vplats">
@@ -104,245 +142,205 @@
           <span class="vfiles-n">{{ realFiles(v).length }} 文件</span>
           <svg class="chev" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M6 9l6 6 6-6" /></svg>
         </div>
-        <div class="vbody">
-          <div class="vbody-inner">
-            <!-- 草稿 -->
-            <div>
-              <span class="field-label">此版本说明草稿（仅草稿；发布时会写入 latest）</span>
-              <textarea
-                v-model="notesDraft[v.version]"
-                class="textarea"
-                rows="3"
-                placeholder="更新说明草稿…"
-                @blur="saveDraft(v.version)"
-              />
-              <div class="draft-actions">
-                <button type="button" class="btn btn-ghost btn-sm" @click="saveDraft(v.version)">保存草稿</button>
+        <Transition name="vexpand">
+        <div v-if="openVer === v.version" class="vgrow">
+          <div class="vbody" @keydown.esc="toggleVer(v.version)">
+            <div class="vbody-inner">
+              <!-- 说明：已发布版本改的是线上更新清单，其余是说明草稿 -->
+              <div>
+                <span class="field-label">{{ v.isLatest ? '更新说明（线上，已安装客户端下一次检查即可见）' : '说明草稿（发布时写入更新清单）' }}</span>
+                <textarea v-model="verEdit.model.notes" class="textarea" rows="3" placeholder="更新说明…" />
               </div>
-            </div>
 
-            <!-- 上传投放区 -->
-            <div>
+              <!-- 上传投放区：交给上传托盘 -->
               <div
                 class="dropmini"
                 :class="{ drag: dragVer === v.version }"
+                role="button"
+                tabindex="0"
                 @dragover.prevent="dragVer = v.version"
-                @dragleave="dragVer = null"
+                @dragleave="e => !e.currentTarget.contains(e.relatedTarget) && (dragVer = null)"
                 @drop.prevent="onDrop($event, v.version)"
-                @click="triggerFile(v.version)"
+                @click="fileInputs[v.version]?.click()"
+                @keydown.enter.self.prevent="fileInputs[v.version]?.click()"
               >
                 <input
-                  :ref="el => setFileInput(v.version, el)"
+                  :ref="el => el && (fileInputs[v.version] = el)"
                   type="file"
                   multiple
                   class="hidden-input"
+                  @click.stop
                   @change="onFileChange(v.version, $event)"
                 />
-                <b>{{ repoType === 'tauri' ? '拖拽各平台包及对应 .sig 到此' : '拖拽文件到此处' }}</b>
-                或点击上传
+                <b>{{ repoType === 'tauri' ? '拖各平台包及对应 .sig 到此' : '拖文件到此处' }}</b>
+                或点击选文件
               </div>
-              <div v-if="uploadProgress[v.version] != null && uploadProgress[v.version] >= 0" class="prog">
-                <div class="prog-bar"><div class="prog-fill" :style="{ width: uploadProgress[v.version] + '%' }" /></div>
-                <span class="prog-txt">{{ uploadProgress[v.version] }}%</span>
-              </div>
-              <div v-else-if="uploadProgress[v.version] === -1" class="prog-indet">上传中（无法计算进度）…</div>
-              <button
-                v-if="uploadProgress[v.version] != null"
-                type="button"
-                class="btn btn-sm btn-ghost"
-                @click="cancelUpload(v.version)"
-              >
-                取消
-              </button>
-            </div>
 
-            <!-- 文件列表 -->
-            <div v-if="realFiles(v).length">
-              <span class="field-label">文件 · {{ realFiles(v).length }}</span>
-              <div class="filelist">
-                <div v-for="f in realFiles(v)" :key="f.name" class="frow">
-                  <span class="fi" :class="{ sig: isSig(f.name) }">
-                    <svg v-if="isSig(f.name)" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M12 2 4 6v6c0 5 3.4 8 8 10 4.6-2 8-5 8-10V6z" /></svg>
-                    <svg v-else viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4M7 10l5 5 5-5M12 15V3" /></svg>
-                  </span>
-                  <a class="fname" :href="fileLandingUrl(v.version, f.name)" target="_blank" rel="noopener">{{ f.name }}</a>
-                  <span class="fsize">{{ fmtSize(f.size) }}</span>
-                  <button type="button" class="fdel" v-tip="'删除文件'" @click.stop="deleteFile(v.version, f.name)">×</button>
+              <!-- 文件列表 -->
+              <div v-if="realFiles(v).length">
+                <span class="field-label">文件 · {{ realFiles(v).length }}</span>
+                <TransitionGroup name="slide-up" tag="div" class="filelist">
+                  <div v-for="f in realFiles(v)" :key="f.name" class="frow">
+                    <span class="fi" :class="{ sig: isSig(f.name) }">
+                      <svg v-if="isSig(f.name)" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M12 2 4 6v6c0 5 3.4 8 8 10 4.6-2 8-5 8-10V6z" /></svg>
+                      <svg v-else viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4M7 10l5 5 5-5M12 15V3" /></svg>
+                    </span>
+                    <a class="fname" :href="fileLandingUrl(v.version, f.name)" target="_blank" rel="noopener">{{ f.name }}</a>
+                    <span class="fsize">{{ fmtSize(f.size) }}</span>
+                    <TwoStepButton
+                      label="×"
+                      armed-label="再按删除"
+                      :aria-label="`删除 ${f.name}`"
+                      btn-class="fdel"
+                      :busy="deletingFile === `${v.version}/${f.name}`"
+                      @confirm="deleteFile(v.version, f.name)"
+                    />
+                  </div>
+                </TransitionGroup>
+              </div>
+
+              <!-- 缺 .sig 时就地拦一下，写清缺了哪些 -->
+              <div v-if="sigWarn && sigWarn.ver === v.version" class="danger-zone">
+                <span class="dz-t"><b>缺少 .sig：{{ sigWarn.miss.join('、') }}</b> — 这些平台的客户端将无法校验更新</span>
+                <div class="vactions">
+                  <button type="button" class="btn btn-ghost btn-sm" @click="sigWarn = null">取消</button>
+                  <button type="button" class="btn btn-danger btn-sm" :disabled="publishing" @click="publishVersion(v.version, true)">仍要发布</button>
                 </div>
               </div>
-            </div>
 
-            <!-- 版本操作 -->
-            <div class="vactions">
-              <button v-if="!v.isLatest" type="button" class="btn btn-primary btn-sm" :disabled="publishing" @click="quickPublish(v.version)">设为最新发布</button>
-              <button v-else type="button" class="btn btn-ghost btn-sm" :disabled="publishing" @click="republish(v.version)">重新发布</button>
-              <button v-if="publicBase" type="button" class="btn btn-ghost btn-sm" @click="copy(versionPageUrl(v.version))">复制版本页</button>
-              <button type="button" class="btn btn-danger btn-sm" @click="confirmDeleteVersion(v.version)">删除此版本</button>
+              <!-- 版本操作 -->
+              <div class="vactions">
+                <button type="button" class="btn btn-sm" :class="v.isLatest ? 'btn-ghost' : 'btn-primary'" :disabled="publishing" @click="publishVersion(v.version)">
+                  {{ (verEdit.dirty ? '保存并' : '') + (v.isLatest ? '重新发布' : '设为最新发布') }}
+                </button>
+                <button v-if="publicBase" type="button" class="btn btn-ghost btn-sm" @click="copy(versionPageUrl(v.version))">复制版本页</button>
+                <ConfirmButton
+                  v-if="v.isLatest"
+                  label="删除此版本"
+                  :title="`删除当前发布的 ${v.version}？`"
+                  detail="目录下全部文件永久删除，更新清单随之清空——已安装客户端将查不到更新。"
+                  confirm-label="删除"
+                  danger
+                  align="start"
+                  btn-class="btn btn-danger btn-sm"
+                  @confirm="deleteVersion(v.version)"
+                />
+                <TwoStepButton v-else label="删除此版本" armed-label="再按删除" btn-class="btn btn-danger btn-sm" @confirm="deleteVersion(v.version)" />
+              </div>
+              <SaveBar
+                ref="verBar"
+                :dirty="verEdit.dirty"
+                :busy="savingNotes"
+                :save-label="v.isLatest ? '保存并更新线上' : '保存'"
+                @save="saveVersionNotes"
+                @discard="verEdit.discard()"
+              />
             </div>
           </div>
         </div>
+        </Transition>
       </article>
     </div>
 
     <!-- 高级 / 危险操作 -->
     <div class="adv" :class="{ open: advOpen }">
-      <div class="adv-head" @click="advOpen = !advOpen">
+      <button type="button" class="adv-head" :aria-expanded="advOpen" @click="advOpen = !advOpen">
         <span class="adv-ico">
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7"><circle cx="12" cy="12" r="3" /><path d="M19 12a7 7 0 0 0-.1-1l2-1.5-2-3.5-2.4 1a7 7 0 0 0-1.7-1l-.4-2.5h-4l-.4 2.5a7 7 0 0 0-1.7 1l-2.4-1-2 3.5 2 1.5a7 7 0 0 0 0 2l-2 1.5 2 3.5 2.4-1a7 7 0 0 0 1.7 1l.4 2.5h4l.4-2.5a7 7 0 0 0 1.7-1l2.4 1 2-3.5-2-1.5a7 7 0 0 0 .1-1z" /></svg>
         </span>
-        <div class="adv-t">
-          <h3>高级 / 危险操作</h3>
-          <p>{{ repoType === 'tauri' ? 'platforms' : 'files' }} JSON、发布时间、从磁盘重建、删除应用 — 默认收起</p>
-        </div>
+        <span class="adv-t">
+          <b>高级 / 危险操作</b>
+          <small>{{ repoType === 'tauri' ? 'platforms' : 'files' }} JSON、发布时间、从磁盘重建、删除应用</small>
+        </span>
         <svg class="chev" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M6 9l6 6 6-6" /></svg>
-      </div>
+      </button>
       <div class="adv-body">
-        <!-- 已发布管理 -->
         <template v-if="latestLoaded && published">
           <div class="adv-group">
             <span class="field-label">发布时间 pub_date（ISO 字符串，可选）</span>
-            <div class="row-input">
-              <input v-model="publishedPubDate" class="input code" placeholder="2025-01-01T12:00:00.000Z" />
-              <button type="button" class="btn btn-ghost btn-sm" :disabled="savingPubDate" @click="savePublishedPubDate">保存时间</button>
-            </div>
+            <input v-model="advEdit.model.pub_date" class="input code" placeholder="2025-01-01T12:00:00.000Z" />
           </div>
-
           <div class="adv-group">
-            <span class="field-label">已发布更新说明（保存后直接写 latest.json，无需重新发布）</span>
-            <textarea v-model="publishedNotes" class="textarea" rows="4" placeholder="更新说明…" />
-            <div class="adv-btns">
-              <button type="button" class="btn btn-primary btn-sm" :disabled="savingPub" @click="savePublishedNotes">保存说明</button>
-            </div>
+            <span class="field-label">已发布 {{ jsonField }}（JSON，高级）</span>
+            <textarea v-model="advEdit.model[jsonField]" class="textarea code-ta" rows="12" spellcheck="false" />
           </div>
-
-          <div v-if="repoType === 'tauri'" class="adv-group">
-            <span class="field-label">已发布 platforms（JSON，高级）</span>
-            <textarea v-model="publishedPlatformsJson" class="textarea code-ta" rows="12" spellcheck="false" />
-            <div class="adv-btns">
-              <button type="button" class="btn btn-ghost btn-sm" :disabled="savingPlatforms" @click="savePublishedPlatforms">保存 platforms</button>
-            </div>
-          </div>
-          <div v-else class="adv-group">
-            <span class="field-label">已发布 files（JSON 数组，高级）</span>
-            <textarea v-model="publishedFilesJson" class="textarea code-ta" rows="12" spellcheck="false" />
-            <div class="adv-btns">
-              <button type="button" class="btn btn-ghost btn-sm" :disabled="savingFiles" @click="savePublishedFiles">保存 files</button>
-            </div>
-          </div>
+          <SaveBar
+            ref="advBar"
+            :dirty="advEdit.dirty"
+            :busy="savingAdv"
+            save-label="保存并更新线上"
+            confirm-title="直接改写线上更新清单？"
+            :confirm-detail="`手改的 ${jsonField} 一旦写错，所有已安装客户端的自动更新都会失败。`"
+            @save="saveAdvanced"
+            @discard="advEdit.discard()"
+          />
 
           <div class="adv-group">
             <span class="field-label">下载链接维护</span>
             <div class="adv-btns">
-              <button type="button" class="btn btn-ghost btn-sm" :disabled="refreshingUrls" @click="refreshPublishedUrls">刷新下载链接（合并磁盘）</button>
+              <button type="button" class="btn btn-ghost btn-sm" :disabled="refreshingUrls" @click="refreshPublishedUrls('merge')">刷新下载链接（合并磁盘）</button>
             </div>
             <p class="adv-hint">合并：只更新磁盘上能匹配到的文件的 URL / 签名，保留手工平台或条目。</p>
           </div>
 
           <div class="danger-zone">
-            <span class="dz-t"><b>从磁盘完全重建</b> — 仅用磁盘扫描结果覆盖 {{ repoType === 'tauri' ? 'platforms' : 'files' }}，可能丢失手工数据</span>
-            <button type="button" class="btn btn-danger btn-sm" :disabled="refreshingUrls" @click="refreshPublishedUrlsReplace">完全重建…</button>
+            <span class="dz-t"><b>从磁盘完全重建</b> — 仅用磁盘扫描结果覆盖 {{ jsonField }}，可能丢失手工数据</span>
+            <ConfirmButton
+              label="完全重建"
+              title="用磁盘扫描结果覆盖更新清单？"
+              :detail="`手工维护的 ${jsonField} 条目会丢失。`"
+              confirm-label="重建"
+              danger
+              :busy="refreshingUrls"
+              btn-class="btn btn-danger btn-sm"
+              @confirm="refreshPublishedUrls('replace')"
+            />
           </div>
         </template>
 
         <div class="danger-zone">
-          <span class="dz-t"><b>删除应用</b> — 移除该应用及全部版本、latest.json、草稿与元数据，不可恢复</span>
-          <button type="button" class="btn btn-danger btn-sm" @click="confirmDeleteApp">删除应用…</button>
+          <span class="dz-t"><b>删除应用</b> — 移除该应用及全部版本、更新清单、说明草稿与元数据，不可恢复</span>
+          <ConfirmButton
+            label="删除应用"
+            :title="`删除应用「${displayLabel}」？`"
+            :detail="`包名 ${appName} 下 ${versions.length} 个版本全部删除，已安装客户端将查不到更新。不可恢复。`"
+            confirm-label="删除"
+            danger
+            btn-class="btn btn-danger btn-sm"
+            @confirm="deleteApp"
+          />
         </div>
       </div>
     </div>
-
-    <!-- 对外接口弹层 -->
-    <teleport to="body">
-      <div v-if="showApi && publicBase" class="modal-back" @click.self="showApi = false">
-        <div class="modal card modal-wide">
-          <div class="modal-head">
-            <h2>对外接口</h2>
-            <button type="button" class="modal-x" @click="showApi = false">×</button>
-          </div>
-          <div class="modal-body">
-            <p class="hint">旧版 Tauri / 脚本请继续使用 <code>latest.json</code>，行为不变。</p>
-            <ShareLinkRow v-if="latestAppShortcutUrl" label="最新版本页（推荐）" :url="latestAppShortcutUrl" />
-            <ShareLinkRow v-if="publishedVersionPageUrl" label="当前发布版本页" :url="publishedVersionPageUrl" />
-            <p v-if="latestAppShortcutUrl" class="hint sm">
-              <code>/app/{{ appName }}/latest</code> 会 302 到当前已发布目录；固定版本链接为 <code>/app/{{ appName }}/&lt;目录名&gt;</code>。版本页：<strong>点击文件名</strong>进入单文件说明页，右侧<strong>下载</strong>为直链；列表不展示 <code>.sig</code>。
-            </p>
-            <ShareLinkRow label="latest.json" :url="latestJsonUrl" />
-            <ShareLinkRow label="JSON 摘要" :url="downloadInfoUrl" />
-            <ShareLinkRow label="直链跳转" :url="downloadRedirectUrl" />
-            <p class="hint sm">
-              带 <code>?redirect=1</code> 时 302 到<strong>当前已发布</strong>主安装包直链（按磁盘 + BASE_URL）。<strong>Tauri</strong> 会排除 <code>.sig</code>，只选 exe/msi/dmg/AppImage 等本体。
-            </p>
-          </div>
-        </div>
-      </div>
-    </teleport>
-
-    <!-- 编辑发布说明弹层 -->
-    <teleport to="body">
-      <div v-if="showPubNotes && published" class="modal-back" @click.self="showPubNotes = false">
-        <div class="modal card">
-          <div class="modal-head">
-            <h2>编辑发布说明</h2>
-            <button type="button" class="modal-x" @click="showPubNotes = false">×</button>
-          </div>
-          <div class="modal-body">
-            <p class="hint sm">保存后直接写入 latest.json，无需重新发布。</p>
-            <textarea v-model="publishedNotes" class="textarea" rows="6" placeholder="更新说明…" />
-          </div>
-          <div class="row">
-            <button type="button" class="btn btn-ghost" @click="showPubNotes = false">取消</button>
-            <button type="button" class="btn btn-primary" :disabled="savingPub" @click="savePublishedNotesModal">保存说明</button>
-          </div>
-        </div>
-      </div>
-    </teleport>
-
-    <!-- 新建版本弹层 -->
-    <teleport to="body">
-      <div v-if="showNewVer" class="modal-back" @click.self="showNewVer = false">
-        <div class="modal card">
-          <div class="modal-head">
-            <h2>新建版本</h2>
-            <button type="button" class="modal-x" @click="showNewVer = false">×</button>
-          </div>
-          <div class="modal-body">
-            <p v-if="repoType === 'tauri'" class="hint sm">Tauri：须为 SemVer 2.0 三段式，如 v1.0.0</p>
-            <p v-else class="hint sm">
-              通用：目录名即版本标识（字母数字、点、下划线、连字符），如 <code>2.0.2</code>、<code>2024-01</code>、<code>1.0-beta</code>，不强制 <code>v</code> 前缀。
-            </p>
-            <input v-model="newVerInput" class="input" :placeholder="repoType === 'tauri' ? 'v1.0.0' : '例如 2.0.2 或 1.0-beta'" @keyup.enter="createVersion" />
-            <p v-if="newVerErr" class="err">{{ newVerErr }}</p>
-          </div>
-          <div class="row">
-            <button type="button" class="btn btn-ghost" @click="showNewVer = false">取消</button>
-            <button type="button" class="btn btn-primary" :disabled="creatingVer" @click="createVersion">创建</button>
-          </div>
-        </div>
-      </div>
-    </teleport>
   </div>
 </template>
 
 <script setup>
-import { ingestFromDataTransfer } from '@/composables/useFolderUpload';
-import { copyText } from '@/utils/copy-text';
-import { ref, computed, watch } from 'vue';
+import { ref, computed, watch, nextTick } from 'vue';
 import { useRoute, useRouter } from 'vue-router';
 import { api, uploadWithProgress, uploadAppVersion } from '@/api/client';
 import { useToast } from '@/composables/useToast';
+import { useUnsaved } from '@/composables/useUnsaved';
+import { useUploads } from '@/stores/uploads';
+import { ingestFromDataTransfer, describeUploadBatch } from '@/composables/useFolderUpload';
 import ShareLinkRow from '@/components/ShareLinkRow.vue';
+import Layer from '@/components/ui/Layer.vue';
+import SaveBar from '@/components/ui/SaveBar.vue';
+import ConfirmButton from '@/components/ui/ConfirmButton.vue';
+import TwoStepButton from '@/components/ui/TwoStepButton.vue';
+import { copyText } from '@/utils/copy-text';
 import { joinReleaseArtifactUrl, suggestedPublicBaseFromVite } from '@/utils/public-url';
 
 const route = useRoute();
 const router = useRouter();
 const { toast } = useToast();
+const uploads = useUploads();
 
 const appName = computed(() => decodeURIComponent(route.params.name || ''));
 const loading = ref(true);
 const repoType = ref('general');
-const displayNameEdit = ref('');
-const descriptionEdit = ref('');
-const savingPublicDisplay = ref(false);
+const meta = ref({ displayName: '', description: '' });
+const savingMeta = ref(false);
 const packageNameEdit = ref('');
 const savingPackageName = ref(false);
 const versions = ref([]);
@@ -350,78 +348,90 @@ const notesDraft = ref({});
 const publicBase = ref('');
 const published = ref(null);
 const latestLoaded = ref(false);
-const publishedNotes = ref('');
-const publishedPubDate = ref('');
-const publishedPlatformsJson = ref('{}');
-const publishedFilesJson = ref('[]');
-const savingPub = ref(false);
-const savingPubDate = ref(false);
-const savingPlatforms = ref(false);
-const savingFiles = ref(false);
+const savingNotes = ref(false);
+const savingAdv = ref(false);
 const refreshingUrls = ref(false);
 const showNewVer = ref(false);
 const newVerInput = ref('');
 const newVerErr = ref('');
 const creatingVer = ref(false);
 const dragVer = ref(null);
-const uploadProgress = ref({});
-const uploadAborts = ref({});
-const fileInputs = ref({});
+const fileInputs = {};
+const cardEls = {};
+const deletingFile = ref('');
+const publishing = ref(false);
+const sigWarn = ref(null);
 
-// 渐进披露：版本卡展开态、高级折叠态、弹层
+// 渐进披露：版本卡同时只开一张；基本信息 / 高级各自折叠
 const openVer = ref(null);
 const advOpen = ref(false);
 const infoOpen = ref(false);
-const showApi = ref(false);
-const showPubNotes = ref(false);
+const metaBar = ref(null);
+const advBar = ref(null);
+const verBar = ref(null); // v-for 里的 ref 是数组，但同时只渲染一张卡的保存条
 
-const displayLabel = computed(() => displayNameEdit.value.trim() || appName.value);
+const jsonField = computed(() => (repoType.value === 'tauri' ? 'platforms' : 'files'));
+const displayLabel = computed(() => meta.value.displayName?.trim() || appName.value);
+const packageChanged = computed(() => !!packageNameEdit.value.trim() && packageNameEdit.value.trim() !== appName.value);
+
+/* ── 未存改动：三处各一份，都叠在已存数据之上 ── */
+const metaEdit = useUnsaved(() => meta.value, {
+  onBlocked: () => {
+    infoOpen.value = true;
+    metaBar.value?.nudge();
+  },
+});
+const openV = computed(() => versions.value.find(v => v.version === openVer.value) || null);
+/* 已发布版本的说明就是线上那份；其余版本是说明草稿 */
+function savedNotes(v) {
+  if (v.isLatest && published.value) return published.value.notes || '';
+  return notesDraft.value[v.version] || '';
+}
+const verEdit = useUnsaved(() => (openV.value ? { notes: savedNotes(openV.value) } : null), {
+  onBlocked: () => verBar.value?.[0]?.nudge(),
+});
+const advSaved = computed(() =>
+  published.value
+    ? {
+        pub_date: published.value.pub_date || '',
+        platforms: JSON.stringify(published.value.platforms || {}, null, 2),
+        files: JSON.stringify(published.value.files || [], null, 2),
+      }
+    : null,
+);
+const advEdit = useUnsaved(() => advSaved.value, {
+  onBlocked: () => {
+    advOpen.value = true;
+    advBar.value?.nudge();
+  },
+});
 
 const publishedVersionDir = computed(() => versions.value.find(v => v.isLatest)?.version ?? null);
-
 const publishedVersionPageUrl = computed(() => {
   if (!publicBase.value || !publishedVersionDir.value) return '';
   return `${publicBase.value}/app/${encodeURIComponent(appName.value)}/${encodeURIComponent(publishedVersionDir.value)}`;
 });
-
 const latestAppShortcutUrl = computed(() =>
   publicBase.value && appName.value ? `${publicBase.value}/app/${encodeURIComponent(appName.value)}/latest` : '',
 );
-
 const latestJsonUrl = computed(() => `${publicBase.value}/releases/${appName.value}/latest.json`);
-const downloadInfoUrl = computed(
-  () => `${publicBase.value}/api/public/${encodeURIComponent(appName.value)}/latest/download`,
-);
-const downloadRedirectUrl = computed(
-  () =>
-    `${publicBase.value}/api/public/${encodeURIComponent(appName.value)}/latest/download?redirect=1`,
-);
-
-function suggestedBase() {
-  return suggestedPublicBaseFromVite();
-}
+const downloadInfoUrl = computed(() => `${publicBase.value}/api/public/${encodeURIComponent(appName.value)}/latest/download`);
+const downloadRedirectUrl = computed(() => `${downloadInfoUrl.value}?redirect=1`);
 
 function rewritePreviewUrls(preview, base) {
   const b = base.replace(/\/$/, '');
   if (!b || !preview.vdir) return;
-  const vdir = preview.vdir;
-  const app = appName.value;
-  if (preview.platforms) {
-    for (const p of Object.values(preview.platforms)) {
-      if (p?.fileName) p.url = joinReleaseArtifactUrl(b, app, vdir, p.fileName);
-    }
+  for (const p of Object.values(preview.platforms || {})) {
+    if (p?.fileName) p.url = joinReleaseArtifactUrl(b, appName.value, preview.vdir, p.fileName);
   }
-  if (preview.files) {
-    for (const f of preview.files) {
-      if (f?.name) f.url = joinReleaseArtifactUrl(b, app, vdir, f.name);
-    }
+  for (const f of preview.files || []) {
+    if (f?.name) f.url = joinReleaseArtifactUrl(b, appName.value, preview.vdir, f.name);
   }
 }
 
 function isSemVer2CoreWithVPrefix(v) {
   return /^v(0|[1-9]\d*)\.(0|[1-9]\d*)\.(0|[1-9]\d*)$/.test(v);
 }
-
 const GENERAL_VER_MAX = 120;
 function normalizeGeneralVersionForClient(raw) {
   const s = String(raw || '').trim();
@@ -435,33 +445,27 @@ function normalizeGeneralVersionForClient(raw) {
 function versionPageUrl(ver) {
   return `${publicBase.value}/app/${encodeURIComponent(appName.value)}/${encodeURIComponent(ver)}`;
 }
-
 function fileLandingUrl(ver, filename) {
   return `${publicBase.value}/d/${[appName.value, ver, filename].map(encodeURIComponent).join('/')}`;
 }
-
 function fmtSize(b) {
   if (b < 1024) return `${b} B`;
   if (b < 1048576) return `${(b / 1024).toFixed(1)} KB`;
   return `${(b / 1048576).toFixed(1)} MB`;
 }
-
 function fmtDate(s) {
   const d = new Date(s);
   if (Number.isNaN(d.getTime())) return s;
   const p = n => String(n).padStart(2, '0');
   return `${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())}`;
 }
-
 function isSig(name) {
   return /\.sig$/i.test(name);
 }
-
 // 折叠态展示：过滤占位文件
 function realFiles(v) {
   return (v.files || []).filter(x => x.name !== '.gitkeep');
 }
-
 // 折叠态平台/文件概况 chips（按扩展名归类）
 function versionChips(v) {
   const counts = { win: 0, mac: 0, linux: 0, other: 0 };
@@ -481,57 +485,59 @@ function versionChips(v) {
   return out;
 }
 
+function setCardEl(ver, el) {
+  if (el) cardEls[ver] = el;
+}
+/* 同时只开一张；有未存改动时不换卡，抖一下保存条 */
 function toggleVer(ver) {
+  if (verEdit.dirty) {
+    verBar.value?.[0]?.nudge();
+    return;
+  }
+  sigWarn.value = null;
   openVer.value = openVer.value === ver ? null : ver;
 }
-
-function setFileInput(ver, el) {
-  if (el) fileInputs.value[ver] = el;
-}
-
-function triggerFile(ver) {
-  fileInputs.value[ver]?.click();
+async function editPublishedNotes() {
+  if (openVer.value !== publishedVersionDir.value) toggleVer(publishedVersionDir.value);
+  if (openVer.value !== publishedVersionDir.value) return;
+  await nextTick();
+  const card = cardEls[publishedVersionDir.value];
+  card?.scrollIntoView({ behavior: 'smooth', block: 'center' });
+  card?.querySelector('textarea')?.focus({ preventScroll: true });
 }
 
 async function loadMeta() {
   const m = await api('GET', `/api/apps/${encodeURIComponent(appName.value)}/meta`);
   repoType.value = m.repoType === 'tauri' ? 'tauri' : 'general';
-  displayNameEdit.value = m.displayName != null ? String(m.displayName) : '';
-  descriptionEdit.value = m.description != null ? String(m.description) : '';
+  meta.value = { displayName: m.displayName || '', description: m.description || '' };
 }
 
-async function savePublicDisplay() {
-  if (descriptionEdit.value.length > 6000) {
+async function saveMeta() {
+  const v = metaEdit.values();
+  if (v.description.length > 6000) {
     toast('软件简介过长（最多 6000 字）', 'error');
     return;
   }
-  savingPublicDisplay.value = true;
+  savingMeta.value = true;
   try {
-    await api('PATCH', `/api/apps/${encodeURIComponent(appName.value)}/meta`, {
-      displayName: displayNameEdit.value.trim(),
-      description: descriptionEdit.value.trim(),
-    });
+    const next = { displayName: v.displayName.trim(), description: v.description.trim() };
+    await api('PATCH', `/api/apps/${encodeURIComponent(appName.value)}/meta`, next);
+    meta.value = next;
+    metaEdit.discard();
     toast('已保存名称与简介');
   } catch (e) {
     toast(e.message, 'error');
   } finally {
-    savingPublicDisplay.value = false;
+    savingMeta.value = false;
   }
 }
 
 async function savePackageRename() {
   const next = packageNameEdit.value.trim();
-  if (!next || !/^[a-zA-Z0-9_-]+$/.test(next)) {
+  if (!/^[a-zA-Z0-9_-]+$/.test(next)) {
     toast('包名只能包含字母、数字、下划线和连字符', 'error');
     return;
   }
-  if (next === appName.value) return;
-  if (
-    !window.confirm(
-      `将包名「${appName.value}」改为「${next}」：releases 目录、latest.json 内 URL、公开链接中的包名段都会变化，旧链接将失效。确定继续？`,
-    )
-  )
-    return;
   savingPackageName.value = true;
   try {
     await api('POST', `/api/apps/${encodeURIComponent(appName.value)}/rename`, { newName: next });
@@ -547,54 +553,26 @@ async function savePackageRename() {
 async function loadSettingsBase() {
   try {
     const s = await api('GET', '/api/settings');
-    publicBase.value = (s.baseUrl || '').replace(/\/$/, '') || suggestedBase();
+    publicBase.value = (s.baseUrl || '').replace(/\/$/, '') || suggestedPublicBaseFromVite();
   } catch {
-    publicBase.value = suggestedBase();
+    publicBase.value = suggestedPublicBaseFromVite();
   }
 }
 
-function syncPublishedEditors(d) {
-  if (!d) {
-    publishedPubDate.value = '';
-    publishedPlatformsJson.value = '{}';
-    publishedFilesJson.value = '[]';
-    return;
-  }
-  publishedPubDate.value = d.pub_date || '';
-  try {
-    publishedPlatformsJson.value = JSON.stringify(d.platforms || {}, null, 2);
-  } catch {
-    publishedPlatformsJson.value = '{}';
-  }
-  try {
-    publishedFilesJson.value = JSON.stringify(d.files || [], null, 2);
-  } catch {
-    publishedFilesJson.value = '[]';
-  }
-}
-
+/* 只在首次加载时标「未载入」：之后的刷新原地换数据，不让发布区闪没 */
 async function loadLatest() {
-  latestLoaded.value = false;
   try {
-    const d = await api('GET', `/api/apps/${encodeURIComponent(appName.value)}/latest`);
-    published.value = d;
-    publishedNotes.value = d.notes || '';
-    syncPublishedEditors(d);
+    published.value = await api('GET', `/api/apps/${encodeURIComponent(appName.value)}/latest`);
   } catch (e) {
-    if (e.status === 404) {
-      published.value = null;
-      syncPublishedEditors(null);
-    } else toast(e.message, 'error');
+    if (e.status === 404) published.value = null;
+    else toast(e.message, 'error');
   } finally {
     latestLoaded.value = true;
   }
 }
-
 async function loadVersions() {
-  const v = await api('GET', `/api/apps/${encodeURIComponent(appName.value)}/versions`);
-  versions.value = v;
+  versions.value = await api('GET', `/api/apps/${encodeURIComponent(appName.value)}/versions`);
 }
-
 async function loadDrafts() {
   const r = await api('GET', `/api/apps/${encodeURIComponent(appName.value)}/notes-drafts`);
   notesDraft.value = { ...(r.drafts || {}) };
@@ -602,6 +580,7 @@ async function loadDrafts() {
 
 async function loadAll() {
   loading.value = true;
+  latestLoaded.value = false;
   try {
     await loadSettingsBase();
     await loadMeta();
@@ -626,214 +605,174 @@ async function copy(text) {
   }
 }
 
-async function saveDraft(ver) {
-  const text = notesDraft.value[ver] ?? '';
-  try {
-    await api('PUT', `/api/apps/${encodeURIComponent(appName.value)}/versions/${encodeURIComponent(ver)}/notes`, {
-      text,
-    });
-    toast('草稿已保存');
-  } catch (e) {
-    toast(e.message, 'error');
-  }
+function notesUrl(ver) {
+  return `/api/apps/${encodeURIComponent(appName.value)}/versions/${encodeURIComponent(ver)}/notes`;
 }
 
-async function savePublishedNotes() {
-  savingPub.value = true;
+/* 已发布版本：改线上更新清单并同步说明草稿（重新发布时不会被旧草稿覆盖回去）；其余版本只写说明草稿 */
+async function saveVersionNotes() {
+  const v = openV.value;
+  const text = verEdit.values().notes;
+  savingNotes.value = true;
   try {
-    await api('PATCH', `/api/apps/${encodeURIComponent(appName.value)}/latest`, {
-      notes: publishedNotes.value,
-    });
-    toast('已更新已发布说明');
-    await loadLatest();
-  } catch (e) {
-    toast(e.message, 'error');
-  } finally {
-    savingPub.value = false;
-  }
-}
-
-async function savePublishedNotesModal() {
-  await savePublishedNotes();
-  if (!savingPub.value) showPubNotes.value = false;
-}
-
-async function savePublishedPubDate() {
-  savingPubDate.value = true;
-  try {
-    await api('PATCH', `/api/apps/${encodeURIComponent(appName.value)}/latest`, {
-      pub_date: publishedPubDate.value.trim() || '',
-    });
-    toast('已更新 pub_date');
-    await loadLatest();
-  } catch (e) {
-    toast(e.message, 'error');
-  } finally {
-    savingPubDate.value = false;
-  }
-}
-
-async function savePublishedPlatforms() {
-  let parsed;
-  try {
-    parsed = JSON.parse(publishedPlatformsJson.value || '{}');
-    if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) throw new Error('须为 JSON 对象');
-  } catch (e) {
-    toast(e.message || 'JSON 无效', 'error');
-    return;
-  }
-  savingPlatforms.value = true;
-  try {
-    await api('PATCH', `/api/apps/${encodeURIComponent(appName.value)}/latest`, { platforms: parsed });
-    toast('已更新 platforms');
-    await loadLatest();
-    await loadVersions();
-  } catch (e) {
-    toast(e.message, 'error');
-  } finally {
-    savingPlatforms.value = false;
-  }
-}
-
-async function savePublishedFiles() {
-  let parsed;
-  try {
-    parsed = JSON.parse(publishedFilesJson.value || '[]');
-    if (!Array.isArray(parsed)) throw new Error('须为 JSON 数组');
-  } catch (e) {
-    toast(e.message || 'JSON 无效', 'error');
-    return;
-  }
-  savingFiles.value = true;
-  try {
-    await api('PATCH', `/api/apps/${encodeURIComponent(appName.value)}/latest`, { files: parsed });
-    toast('已更新 files');
-    await loadLatest();
-    await loadVersions();
-  } catch (e) {
-    toast(e.message, 'error');
-  } finally {
-    savingFiles.value = false;
-  }
-}
-
-async function refreshPublishedUrls() {
-  refreshingUrls.value = true;
-  try {
-    await api('POST', `/api/apps/${encodeURIComponent(appName.value)}/latest/refresh-urls`, { mode: 'merge' });
-    toast('已合并刷新下载链接');
-    await loadLatest();
-    await loadVersions();
-  } catch (e) {
-    toast(e.message, 'error');
-  } finally {
-    refreshingUrls.value = false;
-  }
-}
-
-async function refreshPublishedUrlsReplace() {
-  if (!window.confirm('将仅用磁盘扫描结果覆盖 platforms 或 files，手工条目可能丢失。确定？')) return;
-  refreshingUrls.value = true;
-  try {
-    await api('POST', `/api/apps/${encodeURIComponent(appName.value)}/latest/refresh-urls`, { mode: 'replace' });
-    toast('已从磁盘完全重建发布条目');
-    await loadLatest();
-    await loadVersions();
-  } catch (e) {
-    toast(e.message, 'error');
-  } finally {
-    refreshingUrls.value = false;
-  }
-}
-
-async function runPublish(ver, { allowMissingSig = false } = {}) {
-  await saveDraft(ver);
-  let preview = await api(
-    'GET',
-    `/api/apps/${encodeURIComponent(appName.value)}/versions/${encodeURIComponent(ver)}/preview-release`,
-  );
-  const k = notesDraft.value[ver] ?? '';
-  preview = { ...preview, notes: k };
-  rewritePreviewUrls(preview, publicBase.value);
-
-  if (repoType.value === 'tauri') {
-    const miss = Object.entries(preview.platforms || {}).filter(([, p]) =>
-      String(p.signature || '').includes('未找到'),
-    );
-    if (miss.length && !allowMissingSig) {
-      const ok = window.confirm(`缺少 .sig：${miss.map(([x]) => x).join(', ')}。仍要发布？`);
-      if (!ok) return;
+    if (v.isLatest && published.value) {
+      await api('PATCH', `/api/apps/${encodeURIComponent(appName.value)}/latest`, { notes: text });
+      published.value = { ...published.value, notes: text };
     }
+    await api('PUT', notesUrl(v.version), { text });
+    notesDraft.value = { ...notesDraft.value, [v.version]: text };
+    verEdit.discard();
+    toast(v.isLatest ? '已更新线上说明' : '说明草稿已保存');
+    return true;
+  } catch (e) {
+    toast(e.message, 'error');
+    return false;
+  } finally {
+    savingNotes.value = false;
   }
-
-  await api('POST', `/api/apps/${encodeURIComponent(appName.value)}/publish`, preview);
-  toast(`✓ ${ver} 已发布`);
-  await loadVersions();
-  await loadLatest();
-  await loadDrafts();
 }
 
-const publishing = ref(false);
-function quickPublish(ver) {
+async function saveAdvanced() {
+  const v = advEdit.values();
+  let parsed;
+  try {
+    parsed = JSON.parse(v[jsonField.value] || (jsonField.value === 'files' ? '[]' : '{}'));
+    if (jsonField.value === 'files' && !Array.isArray(parsed)) throw new Error('files 须为 JSON 数组');
+    if (jsonField.value === 'platforms' && (!parsed || typeof parsed !== 'object' || Array.isArray(parsed))) {
+      throw new Error('platforms 须为 JSON 对象');
+    }
+  } catch (e) {
+    toast(e.message || 'JSON 无效', 'error');
+    return;
+  }
+  savingAdv.value = true;
+  try {
+    await api('PATCH', `/api/apps/${encodeURIComponent(appName.value)}/latest`, {
+      pub_date: v.pub_date.trim(),
+      [jsonField.value]: parsed,
+    });
+    advEdit.discard();
+    toast('已更新线上更新清单');
+    await loadLatest();
+    await loadVersions();
+  } catch (e) {
+    toast(e.message, 'error');
+  } finally {
+    savingAdv.value = false;
+  }
+}
+
+async function refreshPublishedUrls(mode) {
+  if (advEdit.dirty) {
+    advBar.value?.nudge();
+    return;
+  }
+  refreshingUrls.value = true;
+  try {
+    await api('POST', `/api/apps/${encodeURIComponent(appName.value)}/latest/refresh-urls`, { mode });
+    toast(mode === 'replace' ? '已从磁盘完全重建发布条目' : '已合并刷新下载链接');
+    await loadLatest();
+    await loadVersions();
+  } catch (e) {
+    toast(e.message, 'error');
+  } finally {
+    refreshingUrls.value = false;
+  }
+}
+
+/* 有未存改动时「发布」= 保存并发布（按钮文案同步写明），不静默代存 */
+async function publishVersion(ver, allowMissingSig = false) {
   if (publishing.value) return;
   publishing.value = true;
-  runPublish(ver)
-    .catch(e => toast(e.message, 'error'))
-    .finally(() => { publishing.value = false; });
+  try {
+    if (verEdit.dirty && openVer.value === ver && !(await saveVersionNotes())) return;
+    const preview = await api('GET', `/api/apps/${encodeURIComponent(appName.value)}/versions/${encodeURIComponent(ver)}/preview-release`);
+    preview.notes = notesDraft.value[ver] ?? '';
+    rewritePreviewUrls(preview, publicBase.value);
+    if (repoType.value === 'tauri' && !allowMissingSig) {
+      const miss = Object.entries(preview.platforms || {})
+        .filter(([, p]) => String(p.signature || '').includes('未找到'))
+        .map(([k]) => k);
+      if (miss.length) {
+        sigWarn.value = { ver, miss };
+        return;
+      }
+    }
+    await api('POST', `/api/apps/${encodeURIComponent(appName.value)}/publish`, preview);
+    sigWarn.value = null;
+    toast(`✓ ${ver} 已发布`);
+    await loadVersions();
+    await loadLatest();
+    await loadDrafts();
+  } catch (e) {
+    toast(e.message, 'error');
+  } finally {
+    publishing.value = false;
+  }
 }
-const republish = quickPublish;
 
 async function deleteFile(ver, name) {
+  deletingFile.value = `${ver}/${name}`;
   try {
-    await api(
-      'DELETE',
-      `/api/apps/${encodeURIComponent(appName.value)}/versions/${encodeURIComponent(ver)}/files/${encodeURIComponent(name)}`,
-    );
+    await api('DELETE', `/api/apps/${encodeURIComponent(appName.value)}/versions/${encodeURIComponent(ver)}/files/${encodeURIComponent(name)}`);
     toast(`已删除 ${name}`);
     await loadVersions();
   } catch (e) {
     toast(e.message, 'error');
+  } finally {
+    deletingFile.value = '';
   }
 }
 
-function confirmDeleteVersion(ver) {
-  if (
-    !window.confirm(
-      `删除版本「${ver}」将永久移除该目录下全部文件；若当前已发布指向此版本，latest.json 会被清空。不可恢复，确定继续？`,
-    )
-  )
-    return;
-  api('DELETE', `/api/apps/${encodeURIComponent(appName.value)}/versions/${encodeURIComponent(ver)}`)
-    .then(async () => {
-      toast(`版本 ${ver} 已删除`);
-      delete notesDraft.value[ver];
-      await loadVersions();
-      await loadLatest();
-    })
-    .catch(e => toast(e.message, 'error'));
+async function deleteVersion(ver) {
+  try {
+    await api('DELETE', `/api/apps/${encodeURIComponent(appName.value)}/versions/${encodeURIComponent(ver)}`);
+    if (openVer.value === ver) {
+      verEdit.discard();
+      openVer.value = null;
+    }
+    toast(`版本 ${ver} 已删除`);
+    const next = { ...notesDraft.value };
+    delete next[ver];
+    notesDraft.value = next;
+    await loadVersions();
+    await loadLatest();
+  } catch (e) {
+    toast(e.message, 'error');
+  }
 }
 
-function confirmDeleteApp() {
-  if (
-    !window.confirm(
-      `将删除应用「${displayLabel.value}」（包名 ${appName.value}）及 releases 下全部版本、latest.json、草稿与元数据。不可恢复，确定继续？`,
-    )
-  )
-    return;
-  api('DELETE', `/api/apps/${encodeURIComponent(appName.value)}`)
-    .then(() => {
-      toast('已删除');
-      router.push('/');
-    })
-    .catch(e => toast(e.message, 'error'));
+async function deleteApp() {
+  try {
+    await api('DELETE', `/api/apps/${encodeURIComponent(appName.value)}`);
+    metaEdit.discard();
+    verEdit.discard();
+    advEdit.discard();
+    toast('已删除');
+    router.push('/');
+  } catch (e) {
+    toast(e.message, 'error');
+  }
 }
 
-async function onFileChange(ver, ev) {
+/* ── 上传：交给上传托盘，换页不断；传完按 group 信号刷新版本列表 ── */
+function startVersionUpload(ver, items) {
+  if (!items.length) return;
+  const app = appName.value;
+  uploads.start({
+    key: `app:${app}:${ver}`,
+    group: `app:${app}`,
+    title: describeUploadBatch(items).label,
+    target: `${displayLabel.value} · ${ver}`,
+    to: `/app/${encodeURIComponent(app)}`,
+    run: ({ onProgress, signal }) => uploadAppVersion({ app, version: ver, items, onProgress, signal }),
+  });
+}
+function onFileChange(ver, ev) {
   const items = Array.from(ev.target.files || [], f => ({ file: f, relativePath: f.name }));
   ev.target.value = '';
-  await doUpload(ver, items);
+  startVersionUpload(ver, items);
 }
-
 async function onDrop(ev, ver) {
   dragVer.value = null;
   const items = await ingestFromDataTransfer(ev.dataTransfer);
@@ -841,46 +780,14 @@ async function onDrop(ev, ver) {
     toast('版本只收平铺文件，不收文件夹', 'error');
     return;
   }
-  if (items.length) await doUpload(ver, items);
+  startVersionUpload(ver, items);
 }
+watch(() => uploads.doneAt[`app:${appName.value}`], t => t && loadVersions().catch(e => toast(e.message, 'error')));
 
-async function doUpload(ver, items) {
-  if (!items.length) return;
-  if (uploadAborts.value[ver]) {
-    toast(`${ver} 正在上传，等它传完或先取消`, 'error');
-    return;
-  }
-  const ctrl = new AbortController();
-  uploadAborts.value = { ...uploadAborts.value, [ver]: ctrl };
-  uploadProgress.value = { ...uploadProgress.value, [ver]: 0 };
-  try {
-    await uploadAppVersion({
-      app: appName.value,
-      version: ver,
-      items,
-      onProgress: pct => {
-        uploadProgress.value = { ...uploadProgress.value, [ver]: pct < 0 ? -1 : pct };
-      },
-      signal: ctrl.signal,
-    });
-    toast('上传完成');
-    await loadVersions();
-  } catch (e) {
-    if (e.name === 'AbortError' || e.aborted) toast('已暂停 · 重传同名文件可断点续传');
-    else toast(e.message || '上传失败', 'error');
-  } finally {
-    const next = { ...uploadProgress.value };
-    delete next[ver];
-    uploadProgress.value = next;
-    const na = { ...uploadAborts.value };
-    delete na[ver];
-    uploadAborts.value = na;
-  }
-}
-
-function cancelUpload(ver) {
-  const c = uploadAborts.value[ver];
-  if (c) c.abort();
+function closeNewVer() {
+  newVerInput.value = '';
+  newVerErr.value = '';
+  showNewVer.value = false;
 }
 
 async function createVersion() {
@@ -912,9 +819,9 @@ async function createVersion() {
       onProgress: () => {},
     });
     toast(`版本 ${ver} 已创建`);
-    showNewVer.value = false;
-    newVerInput.value = '';
+    closeNewVer();
     await loadVersions();
+    if (!verEdit.dirty) openVer.value = ver;
   } catch (e) {
     toast(e.message, 'error');
   } finally {
@@ -1022,55 +929,24 @@ watch(
 }
 
 /* 弹层 */
-.modal-back {
-  position: fixed;
-  inset: 0;
-  background: rgba(0, 0, 0, 0.65);
-  z-index: 8000;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  padding: 20px;
-}
-.modal {
-  width: 100%;
-  max-width: 440px;
-  padding: 22px;
-}
-.modal-wide {
-  max-width: 620px;
-}
-.modal-head {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  margin-bottom: 14px;
-}
-.modal-head h2 {
-  margin: 0;
-  font-size: 1.05rem;
-  font-weight: 650;
-}
-.modal-x {
-  border: none;
-  background: transparent;
-  color: var(--text3);
-  font-size: 22px;
-  line-height: 1;
-  cursor: pointer;
-  width: 30px;
-  height: 30px;
-  border-radius: var(--radius-xs);
-}
-.modal-x:hover {
-  color: var(--text);
-  background: var(--surface2);
-}
-.modal-body {
-  display: flex;
-  flex-direction: column;
-  gap: 4px;
-}
+/* 新建版本浮层 */
+.lform { width: 320px; max-width: 100%; }
+.l-title { margin: 0 0 8px; font-size: 0.95rem; font-weight: 700; }
+.lform .input { padding: 9px 12px; font-size: 14px; }
+
+/* 版本卡长出 / 收回：行高 0fr ↔ 1fr，只在过渡中裁切（平时不裁，确认层才不会被切掉） */
+.vgrow { display: grid; grid-template-rows: 1fr; }
+.vgrow > .vbody { min-height: 0; }
+.vexpand-enter-active,
+.vexpand-leave-active { transition: grid-template-rows var(--t-slow) var(--ease-out), opacity var(--t-med) var(--ease-out); }
+.vexpand-enter-active > .vbody,
+.vexpand-leave-active > .vbody { overflow: hidden; }
+.vexpand-enter-from,
+.vexpand-leave-to { grid-template-rows: 0fr; opacity: 0; }
+.vhead:focus-visible { outline: 2px solid rgba(56, 189, 248, 0.6); outline-offset: -2px; }
+.dropmini:focus-visible { outline: 2px solid rgba(56, 189, 248, 0.6); outline-offset: 2px; }
+.fdel.armed { width: auto; padding: 0 8px; font-size: 0.7rem; }
+
 .row {
   display: flex;
   justify-content: flex-end;

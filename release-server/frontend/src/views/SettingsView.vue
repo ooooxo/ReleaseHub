@@ -21,7 +21,7 @@
       </p>
       <template v-if="tempTransferEnabled && tempRoot">
         <p class="mono-path">
-          <span class="lbl-inline">临时传输根目录</span>{{ tempRoot }}
+          <span class="lbl-inline">临时文件根目录</span>{{ tempRoot }}
         </p>
         <p class="hint sm path-hint">
           与「应用 / 资源库」同级，默认名为 <code>temp-transfers</code>。实体文件在 <code>blobs/</code> 内，文件名为

@@ -1,6 +1,7 @@
 <!--
   「放弃 · 保存」条：只在有未存改动时浮出，一次交 / 一次丢（ADR-0006，源自 Hrige 0067）。
   用法：<SaveBar ref="bar" :dirty="edit.dirty" :busy="saving" save-label="保存并更新线上" @save="…" @discard="edit.discard()" />
+  加 confirm-title / confirm-detail 则保存前先长出确认层。
   别处拦下操作时调 bar.nudge() 抖一下，告诉人「先处理这里」。
 -->
 <template>
@@ -8,7 +9,17 @@
     <div v-if="dirty" ref="barRef" class="savebar" :class="{ 'is-nudged': nudged }" role="status">
       <span class="sb-msg">{{ message }}</span>
       <button type="button" class="btn btn-ghost btn-sm" :disabled="busy" @click="$emit('discard')">放弃</button>
-      <button type="button" class="btn btn-primary btn-sm" :disabled="busy" @click="$emit('save')">
+      <ConfirmButton
+        v-if="confirmTitle"
+        :label="busy ? '保存中…' : saveLabel"
+        :title="confirmTitle"
+        :detail="confirmDetail"
+        :confirm-label="saveLabel"
+        :busy="busy"
+        btn-class="btn btn-primary btn-sm"
+        @confirm="$emit('save')"
+      />
+      <button v-else type="button" class="btn btn-primary btn-sm" :disabled="busy" @click="$emit('save')">
         {{ busy ? '保存中…' : saveLabel }}
       </button>
     </div>
@@ -18,12 +29,16 @@
 <script setup>
 import { ref } from 'vue';
 import { restartNudge } from '@/utils/restart-nudge';
+import ConfirmButton from './ConfirmButton.vue';
 
 defineProps({
   dirty: { type: Boolean, default: false },
   busy: { type: Boolean, default: false },
   saveLabel: { type: String, default: '保存' },
   message: { type: String, default: '有未保存的改动' },
+  /** 设了就先长出确认层再保存：改的是线上、可能搞坏东西的那类 */
+  confirmTitle: { type: String, default: '' },
+  confirmDetail: { type: String, default: '' },
 });
 defineEmits(['save', 'discard']);
 

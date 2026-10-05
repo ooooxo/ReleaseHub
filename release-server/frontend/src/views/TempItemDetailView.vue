@@ -21,12 +21,13 @@
         </span>
       </div>
       <div class="ab-actions">
-        <button
-          type="button"
-          class="btn btn-danger btn-sm"
-          :disabled="pageLoading || !item"
-          @click="confirmCancel"
-        >取消传输</button>
+        <TwoStepButton
+          label="取消分享"
+          armed-label="再按：立即删除文件"
+          btn-class="btn btn-danger btn-sm"
+          :busy="pageLoading || !item"
+          @confirm="cancelItem"
+        />
       </div>
     </div>
 
@@ -111,6 +112,7 @@
 </template>
 
 <script setup>
+import TwoStepButton from '@/components/ui/TwoStepButton.vue';
 import { copyText } from '@/utils/copy-text';
 import { ref, computed, onMounted, onUnmounted, watch } from 'vue';
 import { useRoute, useRouter } from 'vue-router';
@@ -255,9 +257,7 @@ watch(
   },
 );
 
-async function confirmCancel() {
-  if (!itemId.value) return;
-  if (!window.confirm('确定要取消此临时传输？文件将立即从服务器删除，链接全部失效。')) return;
+async function cancelItem() {
   try {
     await api('DELETE', `/api/temp-transfer/item/${encodeURIComponent(itemId.value)}`);
     toast('已取消');

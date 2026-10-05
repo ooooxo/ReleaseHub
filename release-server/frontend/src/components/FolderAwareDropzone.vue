@@ -9,7 +9,7 @@
   >
     <input ref="fileInputRef" type="file" multiple class="hidden-input" :disabled="disabled" @click.stop @change="onInputChange" />
     <input ref="dirInputRef" type="file" webkitdirectory class="hidden-input" :disabled="disabled" @click.stop @change="onInputChange" />
-    <span>{{ hint }}</span>
+    <slot><span>{{ hint }}</span></slot>
     <button type="button" class="dir-link" :disabled="disabled" @click.stop="dirInputRef.click()">选文件夹</button>
   </div>
 </template>

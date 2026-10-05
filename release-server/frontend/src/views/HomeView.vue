@@ -20,29 +20,42 @@
           <div class="sb-l"><h2>临时分享</h2><span class="sb-count">到期自删</span></div>
         </div>
         <div class="bento">
-          <button
-            type="button"
-            class="dropzone"
-            :class="{ drag: dzDrag }"
-            @click="newTemp"
-            @dragover.prevent="dzDrag = true"
-            @dragleave="dzDrag = false"
-            @drop.prevent="onDzDrop"
-          >
-            <svg class="dz-ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round">
-              <path d="M12 16V4M7 9l5-5 5 5" />
-              <path d="M5 16v3a1 1 0 0 0 1 1h12a1 1 0 0 0 1-1v-3" />
-            </svg>
-            <span class="dz-strong">拖文件 / 文件夹到此</span>
-            或点击新建 · 到期自删
-          </button>
+          <div class="temp-cell">
+            <p v-if="tempDisabled" class="temp-off">本服务器未启用临时文件（TEMP_TRANSFER_ENABLED）</p>
+            <template v-else>
+              <FolderAwareDropzone class="dropzone" @items="onTempItems">
+                <svg class="dz-ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round">
+                  <path d="M12 16V4M7 9l5-5 5 5" />
+                  <path d="M5 16v3a1 1 0 0 0 1 1h12a1 1 0 0 0 1-1v-3" />
+                </svg>
+                <span class="dz-strong">拖文件 / 文件夹到此</span>
+                或点击选文件 · 传完就地出分享链
+              </FolderAwareDropzone>
+              <div class="ttl-row" role="radiogroup" aria-label="有效期">
+                <button
+                  v-for="m in allowedTtls"
+                  :key="m"
+                  type="button"
+                  role="radio"
+                  class="ttl"
+                  :class="{ on: ttlMinutes === m }"
+                  :aria-checked="ttlMinutes === m"
+                  @click="ttlMinutes = m"
+                  v-tip="formatTtl(m)"
+                >{{ shortTtl(m) }}</button>
+              </div>
+            </template>
+          </div>
 
-          <button
+          <div
             v-for="it in tempItems"
             :key="it.id"
-            type="button"
             class="temp-tile"
+            :class="{ 'is-fresh': it.id === freshId }"
+            role="button"
+            tabindex="0"
             @click="goTemp(it)"
+            @keydown.enter.self.prevent="goTemp(it)"
           >
             <div class="tt-head">
               <div class="ring" :class="{ warn: tempWarn(it) }">
@@ -68,8 +81,11 @@
             <div class="tt-foot">
               <span class="mini-tag" :class="{ folder: it.kind === 'folder' }">{{ it.kind === 'folder' ? '文件夹' : '单文件' }}</span>
               <span class="tt-rem">{{ remLabel(it) }}</span>
+              <button v-if="it.landingUrl" type="button" class="tt-copy" v-tip="'复制分享链'" @click.stop="copyLink(it.landingUrl)">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><rect x="9" y="9" width="11" height="11" rx="2" /><path d="M5 15V5a2 2 0 0 1 2-2h10" /></svg>
+              </button>
             </div>
-          </button>
+          </div>
         </div>
       </section>
 
@@ -78,8 +94,45 @@
         <div class="section-bar">
           <div class="sb-l"><h2>所有库</h2><span class="sb-count">{{ allItems.length }} 个</span></div>
           <div class="sb-actions">
-            <button type="button" class="btn btn-ghost btn-sm" @click="showCreateApp = true">新建应用</button>
-            <button type="button" class="btn btn-primary btn-sm" @click="showCreateResource = true">新建资源库</button>
+            <Layer v-model:open="showCreateApp" :guard="appFormDirty">
+              <template #trigger="{ toggle }">
+                <button type="button" class="btn btn-ghost btn-sm" :aria-expanded="showCreateApp" @click="toggle">新建应用</button>
+              </template>
+              <form class="lform" @submit.prevent="createApp">
+                <p class="l-title">新建应用</p>
+                <label class="lbl">包名（目录与 URL，仅字母数字、_ -）</label>
+                <input v-model="newAppName" class="input" placeholder="my-app" autofocus />
+                <label class="lbl">软件名（可选，用于展示）</label>
+                <input v-model="newAppDisplayName" class="input" placeholder="例如：闪电助手" />
+                <label class="lbl">类型</label>
+                <div class="seg" role="radiogroup" aria-label="类型">
+                  <button type="button" role="radio" :aria-checked="newAppRepoType === 'general'" :class="{ on: newAppRepoType === 'general' }" @click="newAppRepoType = 'general'">通用</button>
+                  <button type="button" role="radio" :aria-checked="newAppRepoType === 'tauri'" :class="{ on: newAppRepoType === 'tauri' }" @click="newAppRepoType = 'tauri'">Tauri</button>
+                </div>
+                <div class="row">
+                  <button type="button" class="btn btn-ghost btn-sm" @click="resetAppForm">取消</button>
+                  <button type="submit" class="btn btn-primary btn-sm" :disabled="creatingApp">创建</button>
+                </div>
+              </form>
+            </Layer>
+            <Layer v-model:open="showCreateResource" :guard="resFormDirty">
+              <template #trigger="{ toggle }">
+                <button type="button" class="btn btn-primary btn-sm" :aria-expanded="showCreateResource" @click="toggle">新建资源库</button>
+              </template>
+              <form class="lform" @submit.prevent="createLibrary">
+                <p class="l-title">新建资源库</p>
+                <label class="lbl">资源库标识（目录与 URL，仅字母数字、_ -）</label>
+                <input v-model="newResName" class="input" placeholder="my-resources" autofocus />
+                <label class="lbl">展示名（可选）</label>
+                <input v-model="newResDisplayName" class="input" placeholder="例如：常用工具合集" />
+                <label class="lbl">资源库简介（可选）</label>
+                <textarea v-model="newResDescription" class="textarea" rows="3" placeholder="对外下载页顶部说明" />
+                <div class="row">
+                  <button type="button" class="btn btn-ghost btn-sm" @click="resetResForm">取消</button>
+                  <button type="submit" class="btn btn-primary btn-sm" :disabled="creatingRes">创建</button>
+                </div>
+              </form>
+            </Layer>
           </div>
         </div>
 
@@ -124,51 +177,18 @@
       </section>
     </template>
 
-    <teleport to="body">
-      <div v-if="showCreateApp" class="modal-back" @click.self="showCreateApp = false">
-        <div class="modal card">
-          <h2>新建应用</h2>
-          <label class="lbl">软件名（可选，用于展示）</label>
-          <input v-model="newAppDisplayName" class="input" placeholder="例如：闪电助手" />
-          <label class="lbl">包名（目录与 URL，仅字母数字、_ -）</label>
-          <input v-model="newAppName" class="input" placeholder="my-app" />
-          <label class="lbl">类型</label>
-          <select v-model="newAppRepoType" class="input">
-            <option value="general">通用</option>
-            <option value="tauri">Tauri</option>
-          </select>
-          <div class="row">
-            <button type="button" class="btn btn-ghost" @click="showCreateApp = false">取消</button>
-            <button type="button" class="btn btn-primary" :disabled="creatingApp" @click="createApp">创建</button>
-          </div>
-        </div>
-      </div>
-    </teleport>
-
-    <teleport to="body">
-      <div v-if="showCreateResource" class="modal-back" @click.self="showCreateResource = false">
-        <div class="modal card">
-          <h2>新建资源库</h2>
-          <label class="lbl">展示名（可选）</label>
-          <input v-model="newResDisplayName" class="input" placeholder="例如：常用工具合集" />
-          <label class="lbl">资源库标识（目录与 URL，仅字母数字、_ -）</label>
-          <input v-model="newResName" class="input" placeholder="my-resources" />
-          <label class="lbl">资源库简介（可选）</label>
-          <textarea v-model="newResDescription" class="textarea" rows="3" placeholder="对外下载页顶部说明" />
-          <div class="row">
-            <button type="button" class="btn btn-ghost" @click="showCreateResource = false">取消</button>
-            <button type="button" class="btn btn-primary" :disabled="creatingRes" @click="createLibrary">创建</button>
-          </div>
-        </div>
-      </div>
-    </teleport>
   </div>
 </template>
 
 <script setup>
-import { ref, onMounted, onUnmounted, computed } from 'vue';
+import { ref, onMounted, onUnmounted, computed, watch } from 'vue';
 import { useRouter } from 'vue-router';
-import { api } from '@/api/client';
+import { api, uploadTemp } from '@/api/client';
+import { useUploads } from '@/stores/uploads';
+import { describeUploadBatch } from '@/composables/useFolderUpload';
+import { copyText } from '@/utils/copy-text';
+import FolderAwareDropzone from '@/components/FolderAwareDropzone.vue';
+import Layer from '@/components/ui/Layer.vue';
 import { useToast } from '@/composables/useToast';
 import { formatRemainingSec } from '@/utils/format-remaining';
 
@@ -180,7 +200,12 @@ const tempItems = ref([]);
 const loading = ref(true);
 const loadError = ref('');
 const tempTick = ref(0);
-const dzDrag = ref(false);
+const uploads = useUploads();
+const allowedTtls = ref([]);
+const ttlMinutes = ref(1440);
+const tempDisabled = ref(false);
+/** 刚传完的那张临时卡：就地亮一下，人一眼找到自己的分享链 */
+const freshId = ref(null);
 let tempListTimer = null;
 let tempTickTimer = null;
 const showCreateApp = ref(false);
@@ -212,14 +237,64 @@ function goTemp(it) {
   router.push(`/temp-transfer/${encodeURIComponent(it.id)}`);
 }
 
-function newTemp() {
-  router.push('/temp-transfer');
+function formatTtl(m) {
+  if (m < 60) return `${m} 分钟`;
+  if (m % 1440 === 0) return `${m / 1440} 天`;
+  if (m % 60 === 0) return `${m / 60} 小时`;
+  return `${m} 分钟`;
 }
 
-// 就地拖拽上传为后续增强（需移植 useFolderUpload）；当前先进入创建页
-function onDzDrop() {
-  dzDrag.value = false;
-  router.push('/temp-transfer');
+function shortTtl(m) {
+  if (m % 1440 === 0) return `${m / 1440}d`;
+  if (m % 60 === 0) return `${m / 60}h`;
+  return `${m}m`;
+}
+
+async function loadTtls() {
+  try {
+    const d = await api('GET', '/api/temp-transfer/allowed-ttls');
+    allowedTtls.value = d.allowedTtlsMinutes || [];
+    ttlMinutes.value = allowedTtls.value.includes(d.defaultTtlMinutes) ? d.defaultTtlMinutes : allowedTtls.value[0];
+  } catch (e) {
+    if (e.status === 404) tempDisabled.value = true;
+    else if (e.status !== 401) toast(e.message, 'error');
+  }
+}
+
+/* 临时文件就地闭环（ADR-0003）：拖进来 → 交给上传托盘 → 传完这一格出新卡、可一键复制 */
+function onTempItems(list) {
+  const desc = describeUploadBatch(list);
+  const isFolder = list.length > 1 || list.some(it => it.relativePath.includes('/'));
+  if (isFolder && list.length > 100) {
+    toast('临时文件夹一次最多 100 个文件', 'error');
+    return;
+  }
+  const ttl = ttlMinutes.value;
+  uploads.start({
+    key: `temp:${Date.now()}`,
+    group: 'temp',
+    title: desc.isFolder ? desc.rootName : list[0].file.name,
+    target: `临时文件 · ${formatTtl(ttl)}`,
+    to: '/',
+    run: ({ onProgress, signal }) =>
+      uploadTemp({ items: list, ttlMinutes: ttl, folderName: desc.rootName, onProgress, signal }),
+    linkOf: rec => rec?.landingUrl || '',
+  });
+}
+watch(
+  () => uploads.doneAt.temp,
+  async () => {
+    const done = [...uploads.tasks].reverse().find(t => t.group === 'temp' && t.status === 'done');
+    freshId.value = done?.result?.id ?? null;
+    await loadTempList();
+  },
+);
+
+function copyLink(url) {
+  copyText(url).then(
+    () => toast('已复制分享链'),
+    () => toast('复制失败', 'error'),
+  );
 }
 
 function tempSec(it) {
@@ -286,6 +361,22 @@ async function load() {
   await loadTempList();
 }
 
+/* 浮层里填了东西就算未存改动：点外面不收，免得一下手滑丢掉 */
+const appFormDirty = computed(() => !!(newAppName.value.trim() || newAppDisplayName.value.trim()));
+const resFormDirty = computed(() => !!(newResName.value.trim() || newResDisplayName.value.trim() || newResDescription.value.trim()));
+function resetAppForm() {
+  newAppName.value = '';
+  newAppDisplayName.value = '';
+  newAppRepoType.value = 'general';
+  showCreateApp.value = false;
+}
+function resetResForm() {
+  newResName.value = '';
+  newResDisplayName.value = '';
+  newResDescription.value = '';
+  showCreateResource.value = false;
+}
+
 async function createApp() {
   const name = newAppName.value.trim();
   if (!name) {
@@ -299,9 +390,7 @@ async function createApp() {
     if (dn) body.displayName = dn;
     await api('POST', '/api/apps', body);
     toast('已创建');
-    showCreateApp.value = false;
-    newAppName.value = '';
-    newAppDisplayName.value = '';
+    resetAppForm();
     await load();
     router.push(`/app/${encodeURIComponent(name)}`);
   } catch (e) {
@@ -330,10 +419,7 @@ async function createLibrary() {
     if (desc) body.description = desc;
     await api('POST', '/api/resources', body);
     toast('已创建');
-    showCreateResource.value = false;
-    newResName.value = '';
-    newResDisplayName.value = '';
-    newResDescription.value = '';
+    resetResForm();
     await load();
     router.push(`/resources/${encodeURIComponent(name)}`);
   } catch (e) {
@@ -351,6 +437,7 @@ onMounted(async () => {
   tempListTimer = setInterval(() => {
     loadTempList();
   }, 40000);
+  loadTtls();
   await load();
   if (
     window.location.hash === '#section-resources' ||
@@ -589,34 +676,38 @@ h1 {
   background: var(--green-tint);
 }
 
-/* 投放格 */
-.dropzone {
+/* 投放格：拖进来就交给上传托盘，下面一排挑有效期 */
+.temp-cell {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  min-height: 148px;
+}
+.temp-cell .dropzone {
+  flex: 1;
   border: 1.5px dashed var(--border-strong);
   border-radius: var(--radius);
-  padding: 17px;
+  padding: 14px;
   display: flex;
   flex-direction: column;
   align-items: center;
   justify-content: center;
   text-align: center;
   color: var(--text2);
-  font-size: 0.8rem;
-  min-height: 148px;
+  font-size: 0.78rem;
   cursor: pointer;
-  font-family: inherit;
   background: transparent;
-  transition: border-color var(--t-fast) var(--ease-out), background var(--t-fast) var(--ease-out), color var(--t-fast) var(--ease-out);
 }
-.dropzone:hover,
-.dropzone.drag {
+.temp-cell .dropzone:hover,
+.temp-cell .dropzone.drag {
   border-color: var(--accent);
   background: var(--accent-tint);
   color: var(--accent);
 }
 .dz-ico {
-  width: 34px;
-  height: 34px;
-  margin-bottom: 9px;
+  width: 30px;
+  height: 30px;
+  margin-bottom: 7px;
   color: var(--accent);
   opacity: 0.85;
 }
@@ -626,8 +717,51 @@ h1 {
   font-weight: 600;
   margin-bottom: 3px;
 }
-.dropzone.drag .dz-strong {
+.temp-cell .dropzone.drag .dz-strong {
   color: var(--accent);
+}
+.ttl-row {
+  display: flex;
+  gap: 4px;
+  padding: 3px;
+  background: var(--inset);
+  border-radius: var(--radius-sm);
+}
+.ttl,
+.seg button {
+  flex: 1;
+  white-space: nowrap;
+  padding: 5px 0;
+  border: 0;
+  border-radius: var(--radius-xs);
+  background: transparent;
+  color: var(--text3);
+  font: inherit;
+  font-size: 0.72rem;
+  font-weight: 600;
+  cursor: pointer;
+  transition: color var(--t-fast) var(--ease-hover), background var(--t-fast) var(--ease-hover);
+}
+.ttl { font-family: var(--font-mono); }
+.ttl:hover,
+.seg button:hover { color: var(--text); }
+.ttl.on,
+.seg button.on {
+  color: var(--accent);
+  background: rgba(242, 243, 245, 0.08);
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.35);
+}
+.temp-off {
+  margin: 0;
+  flex: 1;
+  display: grid;
+  place-items: center;
+  padding: 16px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  font-size: 0.76rem;
+  color: var(--text3);
+  text-align: center;
 }
 
 /* 临时卡 */
@@ -711,7 +845,6 @@ h1 {
 .tt-foot {
   display: flex;
   align-items: center;
-  justify-content: space-between;
   gap: 8px;
   margin-top: auto;
 }
@@ -731,62 +864,56 @@ h1 {
   background: var(--indigo-tint);
 }
 .tt-rem {
+  margin-left: auto;
   font-size: 0.72rem;
   color: var(--text2);
   font-family: var(--font-mono);
 }
 
-/* modal */
-.modal-back {
-  position: fixed;
-  inset: 0;
-  background: rgba(0, 0, 0, 0.65);
-  z-index: 8000;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  padding: 20px;
-}
-.modal {
-  width: 100%;
-  max-width: 420px;
-  padding: 24px;
-}
-.modal h2 {
-  margin: 0 0 16px;
-  font-size: 1.15rem;
-  font-weight: 700;
-}
+/* 新建浮层里的短表单 */
+.lform { width: 320px; max-width: 100%; }
+.l-title { margin: 0 0 12px; font-size: 0.95rem; font-weight: 700; }
 .lbl {
   display: block;
   font-size: 12px;
   color: var(--text2);
-  margin-bottom: 6px;
-  margin-top: 12px;
+  margin: 12px 0 6px;
 }
-.lbl:first-of-type {
-  margin-top: 0;
-}
-.input,
-.textarea {
-  width: 100%;
-  margin-bottom: 0;
-}
-.textarea {
-  padding: 12px;
-  border: 1px solid var(--border);
+.l-title + .lbl { margin-top: 0; }
+.lform .input { padding: 9px 12px; font-size: 14px; background: var(--surface); }
+.lform .textarea { background: var(--surface); }
+.seg {
+  display: flex;
+  gap: 4px;
+  padding: 3px;
+  background: var(--inset);
   border-radius: var(--radius-sm);
-  background: var(--surface);
-  color: var(--text);
-  font-family: inherit;
-  font-size: 14px;
-  resize: vertical;
-  margin-top: 4px;
 }
+.seg button { padding: 7px 0; font-size: 0.78rem; }
 .row {
   display: flex;
   justify-content: flex-end;
-  gap: 10px;
-  margin-top: 20px;
+  gap: 8px;
+  margin-top: 16px;
+}
+
+/* 临时卡上的复制钮：纯字形按钮，hover 只动墨阶不铺底（Hrige 纯字形按钮） */
+.tt-copy {
+  flex: none;
+  width: 26px;
+  height: 26px;
+  margin-left: 6px;
+  display: grid;
+  place-items: center;
+  border: 0;
+  background: none;
+  color: var(--text3);
+  cursor: pointer;
+  transition: color var(--t-fast) var(--ease-hover);
+}
+.tt-copy:hover { color: var(--accent); }
+.tt-copy svg { width: 15px; height: 15px; }
+.temp-tile.is-fresh {
+  border-color: rgba(52, 211, 153, 0.5);
 }
 </style>

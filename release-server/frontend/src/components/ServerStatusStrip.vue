@@ -32,8 +32,8 @@
       <div v-else class="rail-state muted">读取中…</div>
 
       <nav class="rail-foot" aria-label="系统">
-        <RouterLink to="/temp-transfer" class="rail-link" :class="{ 'rail-link--active': isTempTransfer }">
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M12 16V4M7 9l5-5 5 5" /><path d="M5 16v3a1 1 0 0 0 1 1h12a1 1 0 0 0 1-1v-3" /></svg>临时传输
+        <RouterLink :to="{ path: '/', hash: '#temp-hub' }" class="rail-link" :class="{ 'rail-link--active': isTempTransfer }">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M12 16V4M7 9l5-5 5 5" /><path d="M5 16v3a1 1 0 0 0 1 1h12a1 1 0 0 0 1-1v-3" /></svg>临时文件
         </RouterLink>
         <RouterLink to="/settings" class="rail-link" :class="{ 'rail-link--active': isSettings }">
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7"><circle cx="12" cy="12" r="3" /><path d="M19 12a7 7 0 0 0-.1-1l2-1.5-2-3.5-2.4 1a7 7 0 0 0-1.7-1l-.4-2.5h-4l-.4 2.5a7 7 0 0 0-1.7 1l-2.4-1-2 3.5 2 1.5a7 7 0 0 0 0 2l-2 1.5 2 3.5 2.4-1a7 7 0 0 0 1.7 1l.4 2.5h4l.4-2.5a7 7 0 0 0 1.7-1l2.4 1 2-3.5-2-1.5a7 7 0 0 0 .1-1z" /></svg>设置
@@ -56,7 +56,7 @@ import { formatBytes } from '@/utils/format-bytes';
 const route = useRoute();
 const isSettings = computed(() => route.name === 'settings');
 const isTempTransfer = computed(
-  () => route.name === 'temp-transfer' || route.name === 'temp-item',
+  () => route.name === 'temp-item',
 );
 
 const disk = ref(null);

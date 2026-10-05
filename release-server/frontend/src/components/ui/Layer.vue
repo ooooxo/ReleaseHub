@@ -11,8 +11,9 @@
         v-if="open"
         ref="panelRef"
         class="layer"
-        :class="[`layer--${align}`, { 'is-nudged': nudged }]"
+        :class="[`layer--${align}`, { 'is-nudged': nudged, 'layer--up': up }]"
         role="dialog"
+        @keydown.esc.stop="tryClose"
       >
         <slot :close="close" />
       </div>
@@ -34,6 +35,7 @@ const emit = defineEmits(['update:open']);
 const anchorRef = ref(null);
 const panelRef = ref(null);
 const nudged = ref(false);
+const up = ref(false);
 
 function toggle() {
   if (props.open) tryClose();
@@ -54,17 +56,24 @@ function tryClose() {
 function onPointerDown(e) {
   if (!anchorRef.value?.contains(e.target)) tryClose();
 }
+/* 焦点在层里时由层自己接 Esc 并截住，不让它冒泡去收起外面的卡；这里只管焦点在层外的情况 */
 function onKeydown(e) {
-  if (e.key === 'Escape') tryClose();
+  if (e.key === 'Escape' && !panelRef.value?.contains(e.target)) tryClose();
 }
 
 watch(
   () => props.open,
   async open => {
     if (open) {
+      nudged.value = false;
       document.addEventListener('pointerdown', onPointerDown, true);
       document.addEventListener('keydown', onKeydown);
+      up.value = false;
       await nextTick();
+      /* 下方放不下、上方放得下就朝上长 */
+      const r = panelRef.value?.getBoundingClientRect();
+      const a = anchorRef.value?.getBoundingClientRect();
+      if (r && a && r.bottom > window.innerHeight - 8 && a.top - r.height - 16 > 0) up.value = true;
       panelRef.value?.querySelector('[autofocus], input, textarea, button')?.focus();
     } else {
       document.removeEventListener('pointerdown', onPointerDown, true);
@@ -101,6 +110,9 @@ onUnmounted(() => {
 }
 .layer--end { right: 0; transform-origin: top right; }
 .layer--start { left: 0; transform-origin: top left; }
+.layer--up { top: auto; bottom: calc(100% + 8px); }
+.layer--up.layer--end { transform-origin: bottom right; }
+.layer--up.layer--start { transform-origin: bottom left; }
 .layer.is-nudged { animation: layer-nudge var(--t-slow) var(--ease-out); }
 
 .layer-enter-active { transition: opacity var(--t-med) var(--ease-out), transform var(--t-med) var(--ease-out); }

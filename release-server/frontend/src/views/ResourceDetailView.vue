@@ -32,79 +32,53 @@
       </div>
     </div>
 
-    <!-- 全宽投放区 -->
+    <!-- 全宽投放区：上传交给上传托盘，换页不断 -->
     <div ref="uploadRef" class="dz-wrap" :class="{ 'section-dim': pageLoading }">
       <FolderAwareDropzone
-        :disabled="pageLoading || uploading"
-        :hint="
-          uploading
-            ? '正在上传…'
-            : '拖文件或文件夹到此处，或点击选文件（同名覆盖并保留元数据）'
-        "
+        :disabled="pageLoading"
+        hint="拖文件或文件夹到此处，或点击选文件（同名覆盖并保留元数据）"
         @items="onUploadItems"
       />
-      <div v-if="uploadPct != null && uploadPct >= 0" class="prog">
-        <div class="prog-bar">
-          <div class="prog-fill" :style="{ width: uploadPct + '%' }" />
-        </div>
-        <span class="prog-txt">{{ uploadPct }}%</span>
-      </div>
-      <div v-else-if="uploadPct === -1" class="prog-txt indet">上传中（无法计算进度）…</div>
-      <button v-if="uploading" type="button" class="btn btn-sm btn-ghost" @click="cancelUpload">取消</button>
     </div>
 
-    <!-- 库设置：折叠区，位于投放区下方、文件区上方 -->
+    <!-- 基本信息：标识 / 展示名 / 简介 / 对外接口 -->
     <div class="adv" :class="{ open: advOpen, 'section-dim': pageLoading }" style="margin-top: 0; margin-bottom: 18px">
-      <div class="adv-head" @click="advOpen = !advOpen">
+      <button type="button" class="adv-head" :aria-expanded="advOpen" @click="advOpen = !advOpen">
         <span class="adv-ico">
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7"><circle cx="12" cy="12" r="3" /><path d="M19 12a7 7 0 0 0-.1-1l2-1.5-2-3.5-2.4 1a7 7 0 0 0-1.7-1l-.4-2.5h-4l-.4 2.5a7 7 0 0 0-1.7 1l-2.4-1-2 3.5 2 1.5a7 7 0 0 0 0 2l-2 1.5 2 3.5 2.4-1a7 7 0 0 0 1.7 1l.4 2.5h4l.4-2.5a7 7 0 0 0 1.7-1l2.4 1 2-3.5-2-1.5a7 7 0 0 0 .1-1z" /></svg>
         </span>
-        <div class="adv-t">
-          <h3>基本信息</h3>
-          <p>标识 / 展示名 / 简介 / 对外接口 — 默认收起</p>
-        </div>
+        <span class="adv-t">
+          <b>基本信息</b>
+          <small>标识 / 展示名 / 简介 / 对外接口</small>
+        </span>
         <svg class="chev" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M6 9l6 6 6-6" /></svg>
-      </div>
+      </button>
       <div class="adv-body">
         <div>
           <span class="field-label">标识（修改后公开 URL 中的路径段会变化）</span>
           <div class="row-input">
-            <input
-              v-model="idEdit"
-              class="input code"
-              spellcheck="false"
-              :placeholder="libraryName"
-              :disabled="pageLoading"
+            <input v-model="idEdit" class="input code" spellcheck="false" :placeholder="libraryName" :disabled="pageLoading" />
+            <ConfirmButton
+              label="改标识"
+              :title="`标识改为「${idEdit.trim()}」？`"
+              detail="公开 URL 中的路径段随之变化，旧链接全部失效。"
+              confirm-label="改标识"
+              danger
+              :busy="savingId || pageLoading || !idChanged"
+              btn-class="btn btn-primary btn-sm"
+              @confirm="saveRename"
             />
-            <button
-              type="button"
-              class="btn btn-primary btn-sm"
-              :disabled="savingId || pageLoading || idEdit.trim() === libraryName || !idEdit.trim()"
-              @click="saveRename"
-            >
-              保存标识
-            </button>
           </div>
         </div>
         <div>
           <span class="field-label">展示名（可选）</span>
-          <input v-model="displayNameEdit" class="input" :placeholder="libraryName" :disabled="pageLoading" />
+          <input v-model="metaEdit.model.displayName" class="input" :placeholder="libraryName" :disabled="pageLoading" />
         </div>
         <div>
           <span class="field-label">资源库简介（可选，显示在公开下载页顶部）</span>
-          <textarea
-            v-model="descriptionEdit"
-            class="textarea"
-            rows="4"
-            placeholder="支持换行"
-            :disabled="pageLoading"
-          />
+          <textarea v-model="metaEdit.model.description" class="textarea" rows="4" placeholder="支持换行" :disabled="pageLoading" />
         </div>
-        <div class="vactions">
-          <button type="button" class="btn btn-primary btn-sm" :disabled="savingMeta || pageLoading" @click="saveMeta">
-            保存名称与简介
-          </button>
-        </div>
+        <SaveBar ref="metaBar" :dirty="metaEdit.dirty" :busy="savingMeta" @save="saveMeta" @discard="metaEdit.discard()" />
 
         <template v-if="publicBase">
           <div class="settings-sep">对外接口</div>
@@ -113,7 +87,6 @@
           <ShareLinkRow v-if="publicJsonUrl" label="JSON" :url="publicJsonUrl" />
           <p class="settings-note">公开页为卡片网格展示简介与版本；含子目录时可进入文件夹浏览或打包 ZIP。</p>
         </template>
-
       </div>
     </div>
 
@@ -124,11 +97,7 @@
           <span class="sb-count">{{ displayItems.length }} 个</span>
         </div>
         <div v-if="hasNestedPaths" class="sb-actions">
-          <button
-            type="button"
-            class="btn btn-sm btn-ghost"
-            @click="folderBrowse = !folderBrowse"
-          >
+          <button type="button" class="btn btn-sm btn-ghost" @click="setFolderBrowse(!folderBrowse)">
             {{ folderBrowse ? '显示全部卡片' : '按文件夹浏览' }}
           </button>
         </div>
@@ -142,20 +111,15 @@
             type="button"
             class="crumb"
             :class="{ current: i === browseCrumbs.length - 1 }"
-            @click="browsePath = c.path"
+            @click="setBrowsePath(c.path)"
           >
             {{ c.label }}
           </button>
-          <button
-            v-if="browseArchiveUrl"
-            type="button"
-            class="crumb-zip"
-            @click="copy(browseArchiveUrl)"
-          >复制当前目录 ZIP 直链</button>
+          <button v-if="browseArchiveUrl" type="button" class="crumb-zip" @click="copy(browseArchiveUrl)">复制当前目录 ZIP 直链</button>
         </nav>
         <ul v-if="browseFolders.length" class="folder-list">
           <li v-for="f in browseFolders" :key="f.path">
-            <button type="button" class="folder-row" @click="browsePath = f.path">
+            <button type="button" class="folder-row" @click="setBrowsePath(f.path)">
               <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z" /></svg>
               {{ f.name }}
             </button>
@@ -163,39 +127,40 @@
         </ul>
       </template>
 
-      <transition-group name="res-card" tag="div" class="bento" :class="{ 'section-dim': pageLoading }">
+      <!-- 卡网格：卡留原位，展开时详情带从该行下方长出（CSS order 把带插到行尾之后） -->
+      <TransitionGroup
+        ref="gridRef"
+        name="res-card"
+        tag="div"
+        class="bento fgrid"
+        :class="{ 'section-dim': pageLoading }"
+      >
         <div
-          v-for="it in displayItems"
+          v-for="(it, idx) in displayItems"
           :key="it.id"
           class="fcard"
           :class="{ open: openId === it.id }"
+          :style="{ order: idx * 2 }"
+          role="button"
+          tabindex="0"
+          :aria-expanded="openId === it.id"
           @click="toggleOpen(it.id)"
+          @keydown.enter.self.prevent="toggleOpen(it.id)"
+          @keydown.space.self.prevent="toggleOpen(it.id)"
         >
           <div class="fc-head">
             <span class="ico is-green">
               <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7"><path d="M14 3v5h5M14 3l5 5v11a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2z" /></svg>
             </span>
             <div class="fc-titles">
-              <span
-                class="fc-name"
-                :class="{ 'path-font': folderBrowse && hasNestedPaths }"
-                v-tip="it.fileName"
-              >{{ itemCardTitle(it) }}</span>
-              <span v-if="itemEdits[it.id]?.version?.trim()" class="fc-ver">{{ itemEdits[it.id].version.trim() }}</span>
+              <span class="fc-name" :class="{ 'path-font': folderBrowse && hasNestedPaths }" v-tip="it.fileName">{{ itemCardTitle(it) }}</span>
+              <span v-if="it.version" class="fc-ver">{{ it.version }}</span>
             </div>
             <span class="fc-size">{{ fmtSize(it.size) }}</span>
           </div>
-          <p v-if="itemCardSubtitle(it) || itemEdits[it.id]?.description?.trim()" class="fc-desc">
-            {{ itemEdits[it.id]?.description?.trim() || itemCardSubtitle(it) }}
-          </p>
+          <p v-if="it.description || itemCardSubtitle(it)" class="fc-desc">{{ it.description || itemCardSubtitle(it) }}</p>
           <div class="fc-foot">
-            <a
-              class="btn btn-primary btn-sm"
-              :href="itemDirect(it)"
-              target="_blank"
-              rel="noopener noreferrer"
-              @click.stop
-            >
+            <a class="btn btn-primary btn-sm" :href="itemDirect(it)" target="_blank" rel="noopener noreferrer" @click.stop>
               <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4M7 10l5 5 5-5M12 15V3" /></svg>
               下载
             </a>
@@ -205,89 +170,92 @@
               <svg class="chev" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M6 9l6 6 6-6" /></svg>
             </span>
           </div>
+        </div>
 
-          <div class="fc-detail" @click.stop>
-            <div class="fc-col">
-              <h4>文件信息</h4>
-              <ul class="kv">
-                <li><span class="k">大小</span><span class="v mono">{{ fmtSize(it.size) }}</span></li>
-                <li v-if="itemEdits[it.id]?.version?.trim()"><span class="k">版本</span><span class="v mono">{{ itemEdits[it.id].version.trim() }}</span></li>
-                <li><span class="k">路径</span><span class="v mono">{{ it.fileName }}</span></li>
-              </ul>
-              <div class="fc-actions">
-                <a
-                  class="btn btn-ghost btn-sm"
-                  :href="itemDirect(it)"
-                  target="_blank"
-                  rel="noopener noreferrer"
-                >下载</a>
-                <button type="button" class="btn btn-ghost btn-sm" @click="copy(itemLanding(it))">复制说明页</button>
-                <button type="button" class="btn btn-ghost btn-sm" @click="copy(itemDirect(it))">复制直链</button>
-                <button
-                  v-if="itemInSubfolder(it)"
-                  type="button"
-                  class="btn btn-ghost btn-sm"
-                  @click="copy(itemFolderZip(it))"
-                >复制所在文件夹 ZIP</button>
+        <section
+          v-if="openItem"
+          key="band"
+          class="band"
+          :style="{ order: bandOrder, '--cols': cols, '--col': openCol }"
+          :aria-label="`${itemCardTitle(openItem)} 详情`"
+          @keydown.esc="toggleOpen(openItem.id)"
+        >
+          <div class="band-clip">
+            <div class="band-pad">
+            <div class="band-inner">
+              <div class="fc-col">
+                <h4>文件信息</h4>
+                <ul class="kv">
+                  <li><span class="k">大小</span><span class="v mono">{{ fmtSize(openItem.size) }}</span></li>
+                  <li v-if="openItem.version"><span class="k">版本</span><span class="v mono">{{ openItem.version }}</span></li>
+                  <li><span class="k">路径</span><span class="v mono">{{ openItem.fileName }}</span></li>
+                </ul>
+                <div class="fc-actions">
+                  <a class="btn btn-ghost btn-sm" :href="itemDirect(openItem)" target="_blank" rel="noopener noreferrer">下载</a>
+                  <button type="button" class="btn btn-ghost btn-sm" @click="copy(itemLanding(openItem))">复制说明页</button>
+                  <button type="button" class="btn btn-ghost btn-sm" @click="copy(itemDirect(openItem))">复制直链</button>
+                  <button v-if="itemInSubfolder(openItem)" type="button" class="btn btn-ghost btn-sm" @click="copy(itemFolderZip(openItem))">复制所在文件夹 ZIP</button>
+                </div>
+              </div>
+              <div class="fc-col">
+                <h4>编辑</h4>
+                <div class="fc-form">
+                  <div>
+                    <span class="field-label">显示名（可选）</span>
+                    <input v-model="itemEdit.model.displayName" class="input" :disabled="pageLoading" />
+                  </div>
+                  <div>
+                    <span class="field-label">版本号（可选，公开页显示在名称右侧）</span>
+                    <input v-model="itemEdit.model.version" class="input" :disabled="pageLoading" placeholder="如 v1.2.0" />
+                  </div>
+                  <div>
+                    <span class="field-label">简介（可选）</span>
+                    <textarea v-model="itemEdit.model.description" class="textarea" rows="3" :disabled="pageLoading" />
+                  </div>
+                  <div class="fc-actions">
+                    <TwoStepButton
+                      label="删除文件"
+                      armed-label="再按删除"
+                      btn-class="btn btn-ghost btn-sm"
+                      :busy="deletingItem === openItem.id"
+                      @confirm="deleteItem(openItem)"
+                    />
+                  </div>
+                </div>
               </div>
             </div>
-            <div class="fc-col">
-              <h4>编辑</h4>
-              <div class="fc-form">
-                <div>
-                  <span class="field-label">显示名（可选）</span>
-                  <input v-model="itemEdits[it.id].displayName" class="input" :disabled="pageLoading" />
-                </div>
-                <div>
-                  <span class="field-label">版本号（可选，公开页显示在名称右侧）</span>
-                  <input v-model="itemEdits[it.id].version" class="input" :disabled="pageLoading" placeholder="如 v1.2.0" />
-                </div>
-                <div>
-                  <span class="field-label">简介（可选）</span>
-                  <textarea v-model="itemEdits[it.id].description" class="textarea" rows="3" :disabled="pageLoading" />
-                </div>
-                <div class="fc-actions">
-                  <button
-                    type="button"
-                    class="btn btn-primary btn-sm"
-                    :disabled="savingItem === it.id || deletingItem === it.id || pageLoading"
-                    @click="saveItem(it.id)"
-                  >
-                    保存
-                  </button>
-                  <button
-                    type="button"
-                    class="btn btn-danger btn-sm"
-                    :disabled="deletingItem === it.id || savingItem === it.id || pageLoading"
-                    @click="confirmDeleteItem(it)"
-                  >
-                    删除
-                  </button>
-                </div>
-              </div>
+            <SaveBar ref="itemBar" :dirty="itemEdit.dirty" :busy="savingItem" @save="saveItem" @discard="itemEdit.discard()" />
             </div>
           </div>
-        </div>
-      </transition-group>
+        </section>
+      </TransitionGroup>
     </template>
     <p v-if="!pageLoading && !items.length" class="empty-hint">暂无文件，请上传。</p>
 
     <!-- 危险操作：与基本信息分开，置于页面底部 -->
     <div class="adv danger-adv" :class="{ open: dangerOpen }">
-      <div class="adv-head" @click="dangerOpen = !dangerOpen">
+      <button type="button" class="adv-head" :aria-expanded="dangerOpen" @click="dangerOpen = !dangerOpen">
         <span class="adv-ico danger-ico">
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M10.3 3.9 1.8 18a2 2 0 0 0 1.7 3h17a2 2 0 0 0 1.7-3L13.7 3.9a2 2 0 0 0-3.4 0z" /><path d="M12 9v4M12 17h.01" /></svg>
         </span>
-        <div class="adv-t">
-          <h3>危险操作</h3>
-          <p>删除资源库 — 不可恢复，默认收起</p>
-        </div>
+        <span class="adv-t">
+          <b>危险操作</b>
+          <small>删除资源库 — 不可恢复</small>
+        </span>
         <svg class="chev" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M6 9l6 6 6-6" /></svg>
-      </div>
+      </button>
       <div class="adv-body">
         <div class="danger-zone">
           <span class="dz-t"><b>删除资源库</b> — 连同全部文件不可恢复</span>
-          <button type="button" class="btn btn-danger btn-sm" @click="confirmDeleteLibrary">删除资源库…</button>
+          <ConfirmButton
+            label="删除资源库"
+            :title="`删除整个资源库「${displayLabel}」？`"
+            :detail="`${items.length} 个文件与公开链接一并删除，不可恢复。`"
+            confirm-label="删除"
+            danger
+            btn-class="btn btn-danger btn-sm"
+            @confirm="deleteLibrary"
+          />
         </div>
       </div>
     </div>
@@ -295,52 +263,80 @@
 </template>
 
 <script setup>
-import { copyText } from '@/utils/copy-text';
-import { ref, computed, watch, reactive } from 'vue';
+import { ref, computed, watch, onUnmounted } from 'vue';
 import { useRoute, useRouter } from 'vue-router';
 import { api, uploadResource } from '@/api/client';
 import { useToast } from '@/composables/useToast';
+import { useUnsaved } from '@/composables/useUnsaved';
+import { useUploads } from '@/stores/uploads';
 import ShareLinkRow from '@/components/ShareLinkRow.vue';
 import FolderAwareDropzone from '@/components/FolderAwareDropzone.vue';
+import SaveBar from '@/components/ui/SaveBar.vue';
+import TwoStepButton from '@/components/ui/TwoStepButton.vue';
+import ConfirmButton from '@/components/ui/ConfirmButton.vue';
 import { describeUploadBatch } from '@/composables/useFolderUpload';
 import { listDirectoryLevel, breadcrumbSegments, encodePathForUrl } from '@/utils/file-tree';
 import { suggestedPublicBaseFromVite } from '@/utils/public-url';
+import { copyText } from '@/utils/copy-text';
 
 const route = useRoute();
 const router = useRouter();
 const { toast } = useToast();
+const uploads = useUploads();
 
 const libraryName = computed(() => decodeURIComponent(route.params.name || ''));
 const pageLoading = ref(true);
 const publicBase = ref('');
-const displayNameEdit = ref('');
-const descriptionEdit = ref('');
+const meta = ref({ displayName: '', description: '' });
 const idEdit = ref('');
 const savingMeta = ref(false);
 const savingId = ref(false);
-const savingItem = ref(null);
+const savingItem = ref(false);
 const deletingItem = ref(null);
-const uploading = ref(false);
 const items = ref([]);
-/** 每项编辑草稿；键与 items[].id 对齐，模板 v-model 依赖此对象已存在 */
-const itemEdits = reactive({});
-const uploadPct = ref(null);
 const browsePath = ref('');
 const folderBrowse = ref(false);
 const advOpen = ref(false);
 const dangerOpen = ref(false);
 const openId = ref(null);
 const uploadRef = ref(null);
+const metaBar = ref(null);
+const itemBar = ref(null);
 
+const openItem = computed(() => items.value.find(it => it.id === openId.value) || null);
+const itemEdit = useUnsaved(() => openItem.value, { onBlocked: () => itemBar.value?.nudge() });
+const metaEdit = useUnsaved(() => meta.value, {
+  onBlocked: () => {
+    advOpen.value = true;
+    metaBar.value?.nudge();
+  },
+});
+
+const idChanged = computed(() => !!idEdit.value.trim() && idEdit.value.trim() !== libraryName.value);
+const displayLabel = computed(() => meta.value.displayName?.trim() || libraryName.value);
+
+/* 同一页同时只开一张；有未存改动时不换卡，抖一下保存条 */
 function toggleOpen(id) {
+  if (itemEdit.dirty) {
+    itemBar.value?.nudge();
+    return;
+  }
   openId.value = openId.value === id ? null : id;
+}
+function setFolderBrowse(v) {
+  if (itemEdit.dirty) return itemBar.value?.nudge();
+  openId.value = null;
+  folderBrowse.value = v;
+}
+function setBrowsePath(p) {
+  if (itemEdit.dirty) return itemBar.value?.nudge();
+  openId.value = null;
+  browsePath.value = p;
 }
 
 function scrollToUpload() {
   uploadRef.value?.scrollIntoView({ behavior: 'smooth', block: 'start' });
 }
-
-const displayLabel = computed(() => displayNameEdit.value.trim() || libraryName.value);
 
 const publicPageUrl = computed(() =>
   publicBase.value && libraryName.value ? `${publicBase.value}/r/${encodeURIComponent(libraryName.value)}` : '',
@@ -369,27 +365,57 @@ const browseArchiveUrl = computed(() => {
   return `${publicBase.value}/r/${encodeURIComponent(libraryName.value)}/archive${q}`;
 });
 
-function suggestedBase() {
-  return suggestedPublicBaseFromVite();
+/* ── 详情带的位置：网格列数随宽度变，带插在被点卡所在行的行尾之后 ── */
+const gridRef = ref(null);
+const cols = ref(1);
+const ro = new ResizeObserver(() => measureCols());
+function gridEl() {
+  return gridRef.value?.$el || null;
 }
+function measureCols() {
+  const g = gridEl();
+  if (g) cols.value = getComputedStyle(g).gridTemplateColumns.split(' ').filter(Boolean).length || 1;
+}
+watch(gridRef, () => {
+  ro.disconnect();
+  const g = gridEl();
+  if (g) {
+    ro.observe(g);
+    measureCols();
+  }
+});
+onUnmounted(() => ro.disconnect());
+const openIndex = computed(() => displayItems.value.findIndex(it => it.id === openId.value));
+const openCol = computed(() => (openIndex.value < 0 ? 0 : openIndex.value % cols.value));
+const bandOrder = computed(() => {
+  const i = openIndex.value;
+  const rowEnd = Math.min(Math.ceil((i + 1) / cols.value) * cols.value - 1, displayItems.value.length - 1);
+  return rowEnd * 2 + 1;
+});
+/* 展开的卡因删除 / 换目录不在当前列表里了，就收起 */
+watch(openIndex, i => {
+  if (i < 0 && openId.value) openId.value = null;
+});
 
 async function loadSettingsBase() {
   try {
     const s = await api('GET', '/api/settings');
-    publicBase.value = (s.baseUrl || '').replace(/\/$/, '') || suggestedBase();
+    publicBase.value = (s.baseUrl || '').replace(/\/$/, '') || suggestedPublicBaseFromVite();
   } catch {
-    publicBase.value = suggestedBase();
+    publicBase.value = suggestedPublicBaseFromVite();
   }
 }
 
 function enrichItem(it) {
-  const name = libraryName.value;
-  const base = publicBase.value;
   const encPath = encodePathForUrl(it.fileName);
+  const name = encodeURIComponent(libraryName.value);
   return {
     ...it,
-    landingHref: `${base}/rd/${encodeURIComponent(name)}/${encPath}`,
-    downloadUrl: `${base}/r/${encodeURIComponent(name)}/files/${encPath}`,
+    displayName: it.displayName || '',
+    version: it.version || '',
+    description: it.description || '',
+    landingHref: `${publicBase.value}/rd/${name}/${encPath}`,
+    downloadUrl: `${publicBase.value}/r/${name}/files/${encPath}`,
   };
 }
 
@@ -398,73 +424,58 @@ function fileBaseName(path) {
   const i = s.lastIndexOf('/');
   return i >= 0 ? s.slice(i + 1) : s;
 }
-
+/* 卡面只读已存的值：未存改动只活在详情带里 */
 function itemCardTitle(it) {
-  const dn = itemEdits[it.id]?.displayName?.trim();
-  if (dn) return dn;
-  return fileBaseName(it.fileName) || it.fileName;
+  return it.displayName?.trim() || fileBaseName(it.fileName) || it.fileName;
 }
-
 function itemCardSubtitle(it) {
   const path = String(it.fileName || '');
-  const dn = itemEdits[it.id]?.displayName?.trim();
+  const dn = it.displayName?.trim();
   if (dn && dn !== fileBaseName(path)) return path;
   if (path.includes('/')) return path;
   return '';
 }
-
 function itemInSubfolder(it) {
   return String(it.fileName || '').includes('/');
 }
-
 function itemFolderZip(it) {
-  const base = publicBase.value;
-  const name = libraryName.value;
-  if (!base || !name) return '';
   const parts = String(it.fileName).split('/');
   parts.pop();
   const dir = parts.join('/');
   const q = dir ? `?path=${encodeURIComponent(dir)}` : '';
-  return `${base}/r/${encodeURIComponent(name)}/archive${q}`;
+  return `${publicBase.value}/r/${encodeURIComponent(libraryName.value)}/archive${q}`;
 }
-
-function primeItemEdits(list) {
-  const ids = new Set((list || []).map(x => x.id));
-  for (const k of Object.keys(itemEdits)) {
-    if (!ids.has(k)) delete itemEdits[k];
-  }
-  for (const it of list || []) {
-    if (!itemEdits[it.id]) {
-      itemEdits[it.id] = {
-        displayName: it.displayName || '',
-        version: it.version || '',
-        description: it.description || '',
-      };
-    }
-  }
+function itemLanding(it) {
+  return it.landingHref;
+}
+function itemDirect(it) {
+  return it.downloadUrl;
 }
 
 function applyDetail(d) {
-  displayNameEdit.value = d.displayName != null ? String(d.displayName) : '';
-  descriptionEdit.value = d.description != null ? String(d.description) : '';
-  idEdit.value = libraryName.value;
-  const raw = d.items || [];
-  items.value = raw.map(enrichItem);
-  primeItemEdits(raw);
+  meta.value = { displayName: d.displayName || '', description: d.description || '' };
+  items.value = (d.items || []).map(enrichItem);
 }
 
 async function loadPage() {
   pageLoading.value = true;
   try {
     await loadSettingsBase();
-    const d = await api('GET', `/api/resources/${encodeURIComponent(libraryName.value)}`);
-    applyDetail(d);
+    applyDetail(await api('GET', `/api/resources/${encodeURIComponent(libraryName.value)}`));
   } catch (e) {
     toast(e.message, 'error');
     items.value = [];
-    for (const k of Object.keys(itemEdits)) delete itemEdits[k];
   } finally {
     pageLoading.value = false;
+  }
+}
+
+/* 上传完成后静默刷新：不压暗页面，未存改动叠在新数据上照旧保留 */
+async function refreshItems() {
+  try {
+    applyDetail(await api('GET', `/api/resources/${encodeURIComponent(libraryName.value)}`));
+  } catch (e) {
+    toast(e.message, 'error');
   }
 }
 
@@ -472,19 +483,6 @@ function fmtSize(b) {
   if (b < 1024) return `${b} B`;
   if (b < 1048576) return `${(b / 1024).toFixed(1)} KB`;
   return `${(b / 1048576).toFixed(1)} MB`;
-}
-
-function itemLanding(it) {
-  return (
-    it.landingHref ||
-    `${publicBase.value}/rd/${encodeURIComponent(libraryName.value)}/${encodeURIComponent(it.fileName)}`
-  );
-}
-function itemDirect(it) {
-  return (
-    it.downloadUrl ||
-    `${publicBase.value}/r/${encodeURIComponent(libraryName.value)}/files/${encodeURIComponent(it.fileName)}`
-  );
 }
 
 function copy(text) {
@@ -496,18 +494,19 @@ function copy(text) {
 }
 
 async function saveMeta() {
-  if (descriptionEdit.value.length > 6000) {
+  const v = metaEdit.values();
+  if (v.description.length > 6000) {
     toast('简介过长（最多 6000 字）', 'error');
     return;
   }
   savingMeta.value = true;
   try {
     const idx = await api('PATCH', `/api/resources/${encodeURIComponent(libraryName.value)}`, {
-      displayName: displayNameEdit.value.trim(),
-      description: descriptionEdit.value.trim(),
+      displayName: v.displayName.trim(),
+      description: v.description.trim(),
     });
-    displayNameEdit.value = idx.displayName != null ? String(idx.displayName) : '';
-    descriptionEdit.value = idx.description != null ? String(idx.description) : '';
+    meta.value = { displayName: idx.displayName || '', description: idx.description || '' };
+    metaEdit.discard();
     toast('已保存');
   } catch (e) {
     toast(e.message, 'error');
@@ -518,17 +517,10 @@ async function saveMeta() {
 
 async function saveRename() {
   const next = idEdit.value.trim();
-  if (!next || !/^[a-zA-Z0-9_-]+$/.test(next)) {
+  if (!/^[a-zA-Z0-9_-]+$/.test(next)) {
     toast('标识只能包含字母、数字、下划线和连字符', 'error');
     return;
   }
-  if (next === libraryName.value) return;
-  if (
-    !window.confirm(
-      `将资源库标识「${libraryName.value}」改为「${next}」：公开 URL 路径会变化，旧链接将失效。确定继续？`,
-    )
-  )
-    return;
   savingId.value = true;
   try {
     await api('POST', `/api/resources/${encodeURIComponent(libraryName.value)}/rename`, { newName: next });
@@ -541,43 +533,38 @@ async function saveRename() {
   }
 }
 
-async function saveItem(id) {
-  const ed = itemEdits[id];
-  if (!ed) return;
-  if ((ed.description || '').length > 6000) {
+async function saveItem() {
+  const it = openItem.value;
+  const v = itemEdit.values();
+  if (v.description.length > 6000) {
     toast('简介过长', 'error');
     return;
   }
-  savingItem.value = id;
+  savingItem.value = true;
   try {
-    const r = await api('PATCH', `/api/resources/${encodeURIComponent(libraryName.value)}/items/${encodeURIComponent(id)}`, {
-      displayName: ed.displayName,
-      version: ed.version,
-      description: ed.description,
+    const r = await api('PATCH', `/api/resources/${encodeURIComponent(libraryName.value)}/items/${encodeURIComponent(it.id)}`, {
+      displayName: v.displayName,
+      version: v.version,
+      description: v.description,
     });
-    const updated = enrichItem(r.item);
-    const i = items.value.findIndex(x => x.id === updated.id);
-    if (i >= 0) items.value[i] = updated;
-    itemEdits[id] = {
-      displayName: updated.displayName || '',
-      version: updated.version || '',
-      description: updated.description || '',
-    };
+    const i = items.value.findIndex(x => x.id === it.id);
+    if (i >= 0) items.value[i] = enrichItem(r.item);
+    itemEdit.discard();
     toast('已保存');
   } catch (e) {
     toast(e.message, 'error');
   } finally {
-    savingItem.value = null;
+    savingItem.value = false;
   }
 }
 
-async function confirmDeleteItem(it) {
-  if (!window.confirm(`删除文件「${it.fileName}」？磁盘文件与列表项都会删除。`)) return;
+async function deleteItem(it) {
   deletingItem.value = it.id;
   try {
     await api('DELETE', `/api/resources/${encodeURIComponent(libraryName.value)}/items/${encodeURIComponent(it.id)}`);
+    itemEdit.discard();
+    openId.value = null;
     items.value = items.value.filter(x => x.id !== it.id);
-    delete itemEdits[it.id];
     toast('已删除');
   } catch (e) {
     toast(e.message, 'error');
@@ -586,10 +573,11 @@ async function confirmDeleteItem(it) {
   }
 }
 
-async function confirmDeleteLibrary() {
-  if (!window.confirm(`删除整个资源库「${libraryName.value}」？此操作不可恢复。`)) return;
+async function deleteLibrary() {
   try {
     await api('DELETE', `/api/resources/${encodeURIComponent(libraryName.value)}`);
+    itemEdit.discard();
+    metaEdit.discard();
     toast('已删除资源库');
     router.push({ path: '/', hash: '#library-grid' });
   } catch (e) {
@@ -597,86 +585,29 @@ async function confirmDeleteLibrary() {
   }
 }
 
-const uploadAbort = ref(null);
-
-async function doUploadItems(uploadItems) {
-  if (!uploadItems?.length || pageLoading.value) return;
-  const desc = describeUploadBatch(uploadItems);
-  const ctrl = new AbortController();
-  uploadAbort.value = ctrl;
-  uploading.value = true;
-  uploadPct.value = 0;
-  try {
-    const data = await uploadResource({
-      name: libraryName.value,
-      items: uploadItems,
-      onProgress: pct => {
-        uploadPct.value = pct < 0 ? -1 : pct;
-      },
-      signal: ctrl.signal,
-    });
-    const uploaded = data?.uploaded || [];
-    for (const u of uploaded) {
-      const e = enrichItem(u);
-      const ix = items.value.findIndex(x => x.fileName === e.fileName);
-      if (ix >= 0) items.value.splice(ix, 1);
-      items.value.push(e);
-      itemEdits[u.id] = {
-        displayName: u.displayName || '',
-        version: u.version || '',
-        description: u.description || '',
-      };
-    }
-    items.value.sort((a, b) => a.fileName.localeCompare(b.fileName, undefined, { numeric: true }));
-    toast(`${desc.label}：已上传 ${uploaded.length} 个文件`);
-  } catch (e) {
-    if (e.name === 'AbortError' || e.aborted) toast('已暂停 · 重传同名文件可断点续传');
-    else toast(e.message || '上传失败', 'error');
-  } finally {
-    uploading.value = false;
-    uploadPct.value = null;
-    uploadAbort.value = null;
-  }
-}
-
-function cancelUpload() {
-  if (uploadAbort.value) uploadAbort.value.abort();
-}
-
+const uploadGroup = computed(() => `res:${libraryName.value}`);
 function onUploadItems(list) {
-  doUploadItems(list);
+  if (!list?.length || pageLoading.value) return;
+  const name = libraryName.value;
+  uploads.start({
+    key: `res:${name}`,
+    title: describeUploadBatch(list).label,
+    target: `资源库 · ${displayLabel.value}`,
+    to: `/resources/${encodeURIComponent(name)}`,
+    run: ({ onProgress, signal }) => uploadResource({ name, items: list, onProgress, signal }),
+  });
 }
+watch(() => uploads.doneAt[uploadGroup.value], t => t && refreshItems());
 
 watch(
   () => route.params.name,
-  (name, oldName) => {
-    if (oldName !== undefined && name !== oldName) {
-      items.value = [];
-      for (const k of Object.keys(itemEdits)) delete itemEdits[k];
-      displayNameEdit.value = '';
-      descriptionEdit.value = '';
-      idEdit.value = decodeURIComponent(name || '');
-    }
+  () => {
+    items.value = [];
+    openId.value = null;
+    idEdit.value = libraryName.value;
     loadPage();
   },
   { immediate: true },
-);
-
-/** 防止异步或边界情况下 v-model 读到未初始化的 id */
-watch(
-  items,
-  arr => {
-    for (const it of arr) {
-      if (it?.id && !itemEdits[it.id]) {
-        itemEdits[it.id] = {
-          displayName: it.displayName || '',
-          version: it.version || '',
-          description: it.description || '',
-        };
-      }
-    }
-  },
-  { deep: true },
 );
 </script>
 
@@ -707,6 +638,7 @@ watch(
   border-radius: var(--radius);
   padding: 26px 17px;
   display: flex;
+  flex-direction: column;
   align-items: center;
   justify-content: center;
   text-align: center;
@@ -839,9 +771,14 @@ watch(
   border-color: var(--border-strong);
   box-shadow: 0 8px 28px rgba(0, 0, 0, 0.4);
 }
+/* 来源抬起：被展开的卡留在原位，亮一圈强调边、底下长出详情带 */
 .fcard.open {
-  border-color: var(--border-strong);
-  grid-column: 1 / -1;
+  border-color: rgba(56, 189, 248, 0.55);
+  box-shadow: 0 0 0 1px rgba(56, 189, 248, 0.25), 0 10px 30px rgba(0, 0, 0, 0.45);
+}
+.fcard:focus-visible {
+  outline: 2px solid rgba(56, 189, 248, 0.6);
+  outline-offset: 2px;
 }
 .fc-head {
   display: flex;
@@ -896,9 +833,6 @@ watch(
   -webkit-box-orient: vertical;
   overflow: hidden;
 }
-.fcard.open .fc-desc {
-  display: none;
-}
 .fc-foot {
   display: flex;
   gap: 8px;
@@ -929,18 +863,57 @@ watch(
   transform: rotate(180deg);
 }
 
-/* 展开全宽：左右两栏 */
-.fc-detail {
-  display: none;
-  margin-top: 15px;
-  padding-top: 16px;
-  border-top: 1px solid var(--border);
-  grid-template-columns: 1.1fr 1fr;
-  gap: 22px;
+/* 详情带：通栏，插在被点卡所在行之后；尖角指回那张卡（--cols / --col 由脚本给） */
+.band {
+  grid-column: 1 / -1;
+  display: grid;
+  grid-template-rows: 1fr;
+  position: relative;
+  margin-top: 2px;
+}
+.band::before {
+  content: '';
+  position: absolute;
+  top: -7px;
+  left: calc((100% - (var(--cols) - 1) * 13px) / var(--cols) * (var(--col) + 0.5) + var(--col) * 13px - 7px);
+  width: 14px;
+  height: 14px;
+  background: var(--surface2);
+  border-left: 1px solid rgba(56, 189, 248, 0.35);
+  border-top: 1px solid rgba(56, 189, 248, 0.35);
+  transform: rotate(45deg);
+  transition: left var(--t-med) var(--ease-in-out);
+  z-index: 1;
+}
+.band-clip {
+  min-height: 0;
+  background: var(--surface2);
+  border: 1px solid rgba(56, 189, 248, 0.35);
+  border-radius: var(--radius);
   cursor: default;
 }
-.fcard.open .fc-detail {
+.band-pad {
+  padding: 18px;
+}
+.band-inner {
   display: grid;
+  grid-template-columns: 1.1fr 1fr;
+  gap: 22px;
+}
+/* 长出 / 收回：行高从 0fr 到 1fr，内容不缩放、只被裁 */
+.band.res-card-enter-active,
+.band.res-card-leave-active {
+  transition: grid-template-rows var(--t-slow) var(--ease-out), opacity var(--t-med) var(--ease-out);
+}
+.band.res-card-enter-active .band-clip,
+.band.res-card-leave-active .band-clip {
+  overflow: hidden;
+}
+.band.res-card-enter-from,
+.band.res-card-leave-to {
+  grid-template-rows: 0fr;
+  opacity: 0;
+  transform: none;
 }
 .fc-col h4 {
   margin: 0 0 11px;
@@ -965,7 +938,7 @@ watch(
   gap: 11px;
 }
 @media (max-width: 680px) {
-  .fc-detail {
+  .band-inner {
     grid-template-columns: 1fr;
   }
 }
