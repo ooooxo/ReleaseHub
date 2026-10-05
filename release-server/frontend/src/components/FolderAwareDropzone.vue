@@ -56,7 +56,7 @@ async function onInputChange(e) {
   text-align: center;
   color: var(--text2);
   cursor: pointer;
-  transition: border-color 0.18s var(--ease), background 0.18s var(--ease), color 0.18s var(--ease);
+  transition: border-color var(--t-fast) var(--ease-out), background var(--t-fast) var(--ease-out), color var(--t-fast) var(--ease-out);
   font-size: 14px;
   line-height: 1.55;
 }

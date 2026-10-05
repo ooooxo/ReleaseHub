@@ -2,7 +2,7 @@
   <div class="layout-max">
     <!-- 顶栏 -->
     <div class="appbar">
-      <button type="button" class="back" title="返回总览" @click="router.push('/')">
+      <button type="button" class="back" v-tip="'返回总览'" @click="router.push('/')">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M15 18l-6-6 6-6" /></svg>
       </button>
       <div class="ab-titles">
@@ -167,7 +167,7 @@
                   </span>
                   <a class="fname" :href="fileLandingUrl(v.version, f.name)" target="_blank" rel="noopener">{{ f.name }}</a>
                   <span class="fsize">{{ fmtSize(f.size) }}</span>
-                  <button type="button" class="fdel" title="删除文件" @click.stop="deleteFile(v.version, f.name)">×</button>
+                  <button type="button" class="fdel" v-tip="'删除文件'" @click.stop="deleteFile(v.version, f.name)">×</button>
                 </div>
               </div>
             </div>
@@ -1100,14 +1100,4 @@ code {
   font-size: 0.85em;
 }
 
-/* 危险按钮（global.css 未定义，页面内补充，遵循 morii 危险色） */
-.btn-danger {
-  background: var(--danger-tint);
-  color: var(--danger-text);
-  border: 1px solid transparent;
-}
-.btn-danger:hover:not(:disabled) {
-  border-color: var(--danger);
-  color: var(--danger);
-}
 </style>

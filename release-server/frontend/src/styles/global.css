@@ -22,6 +22,7 @@
   --amber-tint: rgba(251, 191, 36, 0.13);
   --danger: #e8624f;
   --danger-text: #f08a7b;
+  --danger-tint: rgba(232, 98, 79, 0.13);
   --ok: #34d399;
   --radius: 14px;
   --radius-sm: 10px;
@@ -34,7 +35,33 @@
   --font-mono: ui-monospace, 'SF Mono', 'JetBrains Mono', 'Cascadia Code', Consolas, monospace;
   --font-path: var(--font-mono);
   --font-mono-anno: var(--font-mono);
-  --ease: cubic-bezier(0.22, 0.61, 0.36, 1);
+
+  /* ---- 动效梯子（ADR-0006，取自 Hrige tokens.css；全站只有这一把） ----------
+     曲线：进出 --ease-out · 屏内 A→B --ease-in-out · hover/换色 --ease-hover。永不 ease-in。
+     弹性：日常为零；只有结果时刻（上传完成 / 复制成功 / 发布成功）用 --spring-soft。 */
+  --ease-out: cubic-bezier(0.23, 1, 0.32, 1);
+  --ease-in-out: cubic-bezier(0.77, 0, 0.175, 1);
+  --ease-hover: cubic-bezier(0.4, 0, 0.2, 1);
+  --spring-soft: cubic-bezier(0.22, 1.2, 0.36, 1);
+  --ease: var(--ease-out);
+  --t-press: 120ms;  /* :active 按压 */
+  --t-fast: 160ms;   /* tip、chip、图标、hover 换色 */
+  --t-med: 220ms;    /* 浮层、列表进出、换页 */
+  --t-slow: 320ms;   /* 详情带长出、大块进场 */
+  --shift: 8px;      /* 进场位移 */
+  --pop: 0.96;       /* 进场起始缩放，从不 scale(0) */
+  --press: 0.97;     /* 按压缩放 */
+}
+
+/* reduced-motion ≠ 不动：保留不位移的淡入与换色，去掉位移、缩放、弹性。组件不必各写一份 */
+@media (prefers-reduced-motion: reduce) {
+  :root {
+    --spring-soft: var(--ease-out);
+    --t-press: 1ms;
+    --shift: 0px;
+    --pop: 1;
+    --press: 1;
+  }
 }
 
 *,
@@ -91,11 +118,13 @@ a {
   border: none;
   border-radius: var(--radius-sm);
   cursor: pointer;
-  transition: transform 0.18s var(--ease), filter 0.15s, box-shadow 0.2s, border-color 0.15s, color 0.15s;
+  transition: transform var(--t-press) var(--ease-out), filter var(--t-fast) var(--ease-hover),
+    box-shadow var(--t-fast) var(--ease-hover), border-color var(--t-fast) var(--ease-hover),
+    color var(--t-fast) var(--ease-hover), background var(--t-fast) var(--ease-hover);
   font-family: inherit;
 }
 .btn:not(:disabled):active {
-  transform: scale(0.97);
+  transform: scale(var(--press));
 }
 .btn:disabled {
   opacity: 0.45;
@@ -117,6 +146,15 @@ a {
 .btn-ghost:hover:not(:disabled) {
   color: var(--text);
   border-color: rgba(56, 189, 248, 0.35);
+}
+.btn-danger {
+  background: var(--danger-tint);
+  color: var(--danger-text);
+  border: 1px solid transparent;
+}
+.btn-danger:hover:not(:disabled) {
+  border-color: var(--danger);
+  color: var(--danger);
 }
 .btn-sm {
   padding: 7px 13px;
@@ -295,12 +333,15 @@ button.app-tile.lib-card {
 
 .slide-up-enter-active,
 .slide-up-leave-active {
-  transition: all 0.25s ease;
+  transition: opacity var(--t-med) var(--ease-out), transform var(--t-med) var(--ease-out);
+}
+.slide-up-move {
+  transition: transform var(--t-med) var(--ease-in-out);
 }
 .slide-up-enter-from,
 .slide-up-leave-to {
   opacity: 0;
-  transform: translateY(8px);
+  transform: translateY(var(--shift));
 }
 
 /* ============================================================
@@ -486,7 +527,7 @@ button.app-tile.lib-card {
   cursor: pointer;
   font-family: inherit;
   background: transparent;
-  transition: border-color 0.18s var(--ease), background 0.18s var(--ease), color 0.18s var(--ease);
+  transition: border-color var(--t-fast) var(--ease-hover), background var(--t-fast) var(--ease-hover), color var(--t-fast) var(--ease-hover);
 }
 .dropzone:hover,
 .dropzone.drag {
@@ -598,7 +639,7 @@ button.app-tile.lib-card {
   border: 1px solid var(--border);
   border-radius: var(--radius);
   overflow: hidden;
-  transition: border-color 0.18s var(--ease);
+  transition: border-color var(--t-fast) var(--ease-hover);
 }
 .vcard.open { border-color: var(--border-strong); }
 .vhead { display: flex; align-items: center; gap: 13px; padding: 14px 16px; cursor: pointer; user-select: none; }
@@ -608,12 +649,12 @@ button.app-tile.lib-card {
 .vplats { display: flex; gap: 5px; flex: 1; flex-wrap: wrap; }
 .vchip { font-size: 0.6rem; font-weight: 600; color: var(--text2); background: var(--inset); padding: 3px 7px; border-radius: 5px; }
 .vfiles-n { font-size: 0.72rem; color: var(--text3); font-family: var(--font-mono); flex: none; }
-.chev { flex: none; width: 16px; height: 16px; color: var(--text3); transition: transform 0.2s var(--ease); }
+.chev { flex: none; width: 16px; height: 16px; color: var(--text3); transition: transform var(--t-med) var(--ease-out); }
 .vcard.open .chev, .adv.open .chev { transform: rotate(180deg); }
 .vbody { display: none; padding: 0 16px 16px; border-top: 1px solid var(--border); }
 .vcard.open .vbody { display: block; }
 .vbody-inner { padding-top: 15px; display: flex; flex-direction: column; gap: 14px; }
-.dropmini { border: 1.4px dashed var(--border-strong); border-radius: var(--radius-sm); padding: 18px; text-align: center; color: var(--text2); font-size: 0.8rem; cursor: pointer; transition: border-color 0.15s, color 0.15s, background 0.15s; }
+.dropmini { border: 1.4px dashed var(--border-strong); border-radius: var(--radius-sm); padding: 18px; text-align: center; color: var(--text2); font-size: 0.8rem; cursor: pointer; transition: border-color var(--t-fast) var(--ease-hover), color var(--t-fast) var(--ease-hover), background var(--t-fast) var(--ease-hover); }
 .dropmini:hover { border-color: var(--accent); color: var(--accent); background: var(--accent-tint); }
 .dropmini b { color: var(--text); display: block; font-weight: 600; margin-bottom: 3px; }
 .dropmini:hover b { color: var(--accent); }
@@ -662,3 +703,24 @@ button.app-tile.lib-card {
 .bigring .bt .bv { font-family: var(--font-mono); font-size: 1.5rem; font-weight: 700; letter-spacing: -0.02em; color: var(--accent); }
 .bigring.warn .bt .bv { color: var(--amber); }
 .bigring .bt .bl { font-size: 0.64rem; color: var(--text3); letter-spacing: 0.08em; text-transform: uppercase; margin-top: 3px; }
+
+/* 签（directives/tip.js）：全站唯一一枚，替代原生 title */
+.tip {
+  position: fixed;
+  z-index: 100;
+  max-width: 280px;
+  padding: 6px 10px;
+  font-size: 0.74rem;
+  line-height: 1.45;
+  color: var(--text);
+  background: var(--inset);
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius-xs);
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.45);
+  pointer-events: none;
+  opacity: 0;
+  transform: translateY(3px);
+  transition: opacity var(--t-fast) var(--ease-out), transform var(--t-fast) var(--ease-out);
+}
+.tip[data-side='below'] { transform: translateY(-3px); }
+.tip.is-shown { opacity: 1; transform: none; }

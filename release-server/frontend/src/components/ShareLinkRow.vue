@@ -1,7 +1,7 @@
 <template>
   <div v-if="url" class="share-link-row">
     <span class="share-lbl">{{ label }}</span>
-    <a class="share-url" :href="url" target="_blank" rel="noopener noreferrer" :title="url">{{ url }}</a>
+    <a class="share-url" :href="url" target="_blank" rel="noopener noreferrer" v-tip="url">{{ url }}</a>
     <button type="button" class="btn btn-sm btn-ghost share-copy" @click="onCopy">复制</button>
   </div>
 </template>

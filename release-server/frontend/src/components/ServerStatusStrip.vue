@@ -2,13 +2,13 @@
   <aside class="disk-rail" :class="{ collapsed }" aria-label="Releases 所在磁盘与导航">
     <div class="rail-inner">
       <div class="rail-head">
-        <RouterLink to="/" class="rail-brand" title="返回总览">
+        <RouterLink to="/" class="rail-brand" v-tip="'返回总览'">
           <span class="rail-bd">
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linejoin="round"><rect x="3" y="3" width="18" height="18" rx="3" /><path d="M3 9h18M9 21V9" /></svg>
           </span>
           <span class="rail-bt"><b>ReleaseHub</b><span>releases 卷</span></span>
         </RouterLink>
-        <button type="button" class="rail-collapse" title="收起侧栏" @click="toggle">
+        <button type="button" class="rail-collapse" v-tip="'收起侧栏'" @click="toggle">
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M15 6l-6 6 6 6" /></svg>
         </button>
       </div>
@@ -42,7 +42,7 @@
     </div>
   </aside>
 
-  <button v-if="collapsed" type="button" class="rail-expand" title="展开侧栏" @click="toggle">
+  <button v-if="collapsed" type="button" class="rail-expand" v-tip="'展开侧栏'" @click="toggle">
     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 6h16M4 12h16M4 18h16" /></svg>
   </button>
 </template>
@@ -124,7 +124,7 @@ onUnmounted(() => {
   border-right: 1px solid var(--border);
   box-sizing: border-box;
   overflow: hidden;
-  transition: width 0.26s var(--ease, ease);
+  transition: width var(--t-med) var(--ease-out);
 }
 .disk-rail.collapsed {
   width: 0;
@@ -197,7 +197,7 @@ onUnmounted(() => {
   cursor: pointer;
   display: grid;
   place-items: center;
-  transition: color 0.15s, border-color 0.15s, background 0.15s;
+  transition: color var(--t-fast) var(--ease-hover), border-color var(--t-fast) var(--ease-hover), background var(--t-fast) var(--ease-hover);
 }
 .rail-collapse:hover {
   color: var(--text);
@@ -249,7 +249,7 @@ onUnmounted(() => {
   height: 100%;
   background: var(--accent);
   border-radius: 99px;
-  transition: width 0.4s var(--ease, ease);
+  transition: width var(--t-slow) var(--ease-out);
 }
 .rail-fill.warn {
   background: var(--amber);
@@ -321,7 +321,7 @@ onUnmounted(() => {
   text-decoration: none;
   border-radius: var(--radius-sm);
   border: 1px solid transparent;
-  transition: color 0.15s, background 0.15s, border-color 0.15s;
+  transition: color var(--t-fast) var(--ease-hover), background var(--t-fast) var(--ease-hover), border-color var(--t-fast) var(--ease-hover);
 }
 .rail-link svg {
   width: 17px;
@@ -354,7 +354,7 @@ onUnmounted(() => {
   display: grid;
   place-items: center;
   box-shadow: 0 6px 20px rgba(0, 0, 0, 0.35);
-  transition: color 0.15s, border-color 0.15s;
+  transition: color var(--t-fast) var(--ease-hover), border-color var(--t-fast) var(--ease-hover);
 }
 .rail-expand:hover {
   color: var(--accent-text);

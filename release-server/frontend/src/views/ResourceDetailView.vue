@@ -4,7 +4,7 @@
       <button
         type="button"
         class="back"
-        title="返回总览"
+        v-tip="'返回总览'"
         @click="router.push({ path: '/', hash: '#library-grid' })"
       >
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M15 18l-6-6 6-6" /></svg>
@@ -179,7 +179,7 @@
               <span
                 class="fc-name"
                 :class="{ 'path-font': folderBrowse && hasNestedPaths }"
-                :title="it.fileName"
+                v-tip="it.fileName"
               >{{ itemCardTitle(it) }}</span>
               <span v-if="itemEdits[it.id]?.version?.trim()" class="fc-ver">{{ itemEdits[it.id].version.trim() }}</span>
             </div>
@@ -695,17 +695,6 @@ watch(
   letter-spacing: 0.04em;
 }
 
-/* 危险按钮（页面级，token 化） */
-.btn-danger {
-  color: var(--danger);
-  background: transparent;
-  border-color: var(--border-strong);
-}
-.btn-danger:hover:not(:disabled) {
-  color: var(--danger);
-  border-color: var(--danger);
-  background: rgba(232, 98, 79, 0.1);
-}
 
 /* 全宽投放区 */
 .dz-wrap {
@@ -726,7 +715,7 @@ watch(
   font-size: 0.84rem;
   cursor: pointer;
   background: transparent;
-  transition: border-color 0.18s var(--ease), background 0.18s var(--ease), color 0.18s var(--ease);
+  transition: border-color var(--t-fast) var(--ease-out), background var(--t-fast) var(--ease-out), color var(--t-fast) var(--ease-out);
 }
 .dz-wrap :deep(.drop-zone:hover),
 .dz-wrap :deep(.drop-zone.drag) {
@@ -775,7 +764,7 @@ watch(
   border-radius: var(--radius-xs);
   padding: 3px 9px;
   cursor: pointer;
-  transition: border-color 0.18s var(--ease);
+  transition: border-color var(--t-fast) var(--ease-out);
 }
 .crumb:hover {
   border-color: var(--accent);
@@ -794,7 +783,7 @@ watch(
   border-radius: var(--radius-xs);
   padding: 3px 10px;
   cursor: pointer;
-  transition: color 0.18s var(--ease), border-color 0.18s var(--ease);
+  transition: color var(--t-fast) var(--ease-out), border-color var(--t-fast) var(--ease-out);
 }
 .crumb-zip:hover {
   color: var(--accent);
@@ -822,7 +811,7 @@ watch(
   cursor: pointer;
   font-size: 0.86rem;
   font-family: inherit;
-  transition: border-color 0.18s var(--ease), background 0.18s var(--ease);
+  transition: border-color var(--t-fast) var(--ease-out), background var(--t-fast) var(--ease-out);
 }
 .folder-row:hover {
   border-color: var(--border-strong);
@@ -844,7 +833,7 @@ watch(
   display: flex;
   flex-direction: column;
   cursor: pointer;
-  transition: box-shadow 0.18s var(--ease), border-color 0.18s var(--ease);
+  transition: box-shadow var(--t-fast) var(--ease-out), border-color var(--t-fast) var(--ease-out);
 }
 .fcard:hover {
   border-color: var(--border-strong);
@@ -934,7 +923,7 @@ watch(
 .fc-hint .chev {
   width: 14px;
   height: 14px;
-  transition: transform 0.2s var(--ease);
+  transition: transform var(--t-med) var(--ease-out);
 }
 .fcard.open .fc-hint .chev {
   transform: rotate(180deg);
@@ -991,7 +980,7 @@ watch(
 /* 列表过渡 */
 .res-card-enter-active,
 .res-card-leave-active {
-  transition: opacity 0.22s var(--ease), transform 0.22s var(--ease);
+  transition: opacity var(--t-med) var(--ease-out), transform var(--t-med) var(--ease-out);
 }
 .res-card-enter-from {
   opacity: 0;
@@ -1002,6 +991,6 @@ watch(
   transform: scale(0.98);
 }
 .res-card-move {
-  transition: transform 0.22s var(--ease);
+  transition: transform var(--t-med) var(--ease-out);
 }
 </style>

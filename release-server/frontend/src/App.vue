@@ -68,7 +68,7 @@ const shelled = computed(() => !!route.meta.requiresAuth);
 
 .fade-enter-active,
 .fade-leave-active {
-  transition: opacity 0.2s ease;
+  transition: opacity var(--t-med) var(--ease-out);
 }
 .fade-enter-from,
 .fade-leave-to {

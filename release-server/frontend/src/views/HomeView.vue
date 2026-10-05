@@ -61,7 +61,7 @@
                 <span class="rtxt">{{ tempRingText(it) }}</span>
               </div>
               <div class="tt-body">
-                <span class="tt-name" :title="it.originalName || '未命名'">{{ it.originalName || '未命名' }}</span>
+                <span class="tt-name" v-tip="it.originalName || '未命名'">{{ it.originalName || '未命名' }}</span>
                 <span class="tt-meta">{{ tempMeta(it) }}</span>
               </div>
             </div>
@@ -463,7 +463,7 @@ h1 {
   text-align: left;
   color: inherit;
   cursor: pointer;
-  transition: box-shadow 0.18s var(--ease), border-color 0.18s var(--ease), transform 0.18s var(--ease);
+  transition: box-shadow var(--t-fast) var(--ease-out), border-color var(--t-fast) var(--ease-out), transform var(--t-fast) var(--ease-out);
   min-height: 148px;
 }
 .tile:hover {
@@ -605,7 +605,7 @@ h1 {
   cursor: pointer;
   font-family: inherit;
   background: transparent;
-  transition: border-color 0.18s var(--ease), background 0.18s var(--ease), color 0.18s var(--ease);
+  transition: border-color var(--t-fast) var(--ease-out), background var(--t-fast) var(--ease-out), color var(--t-fast) var(--ease-out);
 }
 .dropzone:hover,
 .dropzone.drag {
@@ -642,7 +642,7 @@ h1 {
   text-align: left;
   color: inherit;
   cursor: pointer;
-  transition: box-shadow 0.18s var(--ease), border-color 0.18s var(--ease), transform 0.18s var(--ease);
+  transition: box-shadow var(--t-fast) var(--ease-out), border-color var(--t-fast) var(--ease-out), transform var(--t-fast) var(--ease-out);
 }
 .temp-tile:hover {
   border-color: var(--border-strong);
@@ -677,7 +677,7 @@ h1 {
   stroke: currentColor;
   stroke-width: 3.2;
   stroke-linecap: round;
-  transition: stroke-dashoffset 0.4s var(--ease);
+  transition: stroke-dashoffset var(--t-slow) var(--ease-out);
 }
 .rtxt {
   position: absolute;
