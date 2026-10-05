@@ -1,22 +1,112 @@
+/**
+ * 对外分享页（应用版本 / 单文件落地 / 资源库 / 目录浏览 / 临时文件 / 404）的服务端渲染。
+ * 风格与 ooooxo.com 入口页同一套：中性夜色、墨色三级、左对齐大标题、数据成胶囊、白色胶囊主按钮。
+ * 全部页面共用 PAGE_CSS + shell()；每个 render* 只写自己的内容。系统字体栈，不连外部 CDN（ADR-0001）。
+ */
 const { fmtBytesServer, fileBadgeLabel } = require('./download-utils');
 
+/* 类型色：与入口页、管理端胶囊同色——应用天蓝、资源库绿、临时文件琥珀（有期限） */
+const KIND = {
+  app: { label: '应用', color: '#38bdf8' },
+  resource: { label: '资源库', color: '#34d399' },
+  temp: { label: '临时文件', color: '#fbbf24' },
+};
+
+const PAGE_CSS = `
+:root {
+  --night: #0c0c0e; --ink: #f2f3f5; --ink-2: #9ba1ac; --ink-3: #5d646f; --line: rgba(242, 243, 245, .09);
+  --raise: rgba(255, 255, 255, .03); --raise-hover: rgba(255, 255, 255, .055);
+  --font: -apple-system, BlinkMacSystemFont, 'PingFang SC', 'HarmonyOS Sans SC', 'Microsoft YaHei', 'Noto Sans SC', system-ui, sans-serif;
+  --mono: ui-monospace, 'SF Mono', 'Cascadia Code', Consolas, monospace;
+  --ease-out: cubic-bezier(0.23, 1, 0.32, 1); --ease-hover: cubic-bezier(0.4, 0, 0.2, 1);
+  --pad: 40px; --radius: 14px;
+}
+* { box-sizing: border-box; }
+html, body { margin: 0; }
+body { background: var(--night); color: var(--ink); font-family: var(--font); -webkit-font-smoothing: antialiased; }
+a { color: inherit; text-decoration: none; }
+:focus-visible { outline: 2px solid var(--ink); outline-offset: 3px; border-radius: 6px; }
+.num { font-family: var(--mono); font-variant-numeric: tabular-nums; }
+
+.page { max-width: 1120px; margin: 0 auto; padding: 0 var(--pad) 64px; min-height: 100vh; display: flex; flex-direction: column; }
+.brandrow { padding: 28px 0; }
+.wm { font-size: 14px; font-weight: 700; letter-spacing: -0.01em; }
+.main { flex: 1; display: flex; flex-direction: column; gap: 44px; padding-top: 7vh; }
+.page.single .main { justify-content: center; padding: 0 0 12vh; }
+
+.hero { display: flex; flex-direction: column; gap: 18px; max-width: 760px; }
+h1 { margin: 0; font-size: clamp(40px, 5.2vw, 76px); line-height: 1.04; font-weight: 650; letter-spacing: -0.045em; overflow-wrap: anywhere; }
+/* 标题是长文件名时降一档：大字号只给短名字，长串在手机上会断成五六行 */
+h1.long { font-size: clamp(28px, 3.2vw, 44px); line-height: 1.18; letter-spacing: -0.025em; }
+.desc { font-size: 16px; line-height: 1.7; color: var(--ink-2); max-width: 620px; }
+.fname { font-family: var(--mono); font-size: 13px; color: var(--ink-3); overflow-wrap: anywhere; }
+
+.chips { display: flex; flex-wrap: wrap; gap: 8px; }
+.chip { font-size: 12px; line-height: 1.5; padding: 4px 10px; border-radius: 99px; background: rgba(255, 255, 255, .06); color: var(--ink-2); white-space: nowrap; }
+.chip.k { color: var(--kc); background: color-mix(in srgb, var(--kc) 14%, transparent); }
+
+.acts { display: flex; flex-wrap: wrap; gap: 10px; }
+.btn { height: 44px; padding: 0 20px; border-radius: 22px; border: 0; display: inline-flex; align-items: center; justify-content: center; gap: 8px; flex: none;
+  font: inherit; font-size: 14px; font-weight: 600; white-space: nowrap; cursor: pointer;
+  transition: background .16s var(--ease-hover), color .16s var(--ease-hover), opacity .16s var(--ease-hover), transform .12s var(--ease-out); }
+.btn:active { transform: scale(.97); }
+.btn.p { background: var(--ink); color: var(--night); }
+.btn.p:hover { opacity: .88; }
+.btn.g { background: rgba(255, 255, 255, .06); color: var(--ink-2); box-shadow: inset 0 0 0 1px var(--line); }
+.btn.g:hover { color: var(--ink); background: rgba(255, 255, 255, .09); }
+.btn.sm { height: 34px; padding: 0 14px; border-radius: 17px; font-size: 13px; }
+.btn svg { width: 14px; height: 14px; }
+
+/* 版本页的文件清单：一行一个文件，行与行之间一条线 */
+.files { list-style: none; margin: 0; padding: 0; border-top: 1px solid var(--line); }
+.file { display: flex; align-items: center; gap: 12px 16px; padding: 16px 0; border-bottom: 1px solid var(--line); }
+.file .nm { flex: 1; min-width: 0; font-size: 15px; font-weight: 550; overflow-wrap: anywhere; transition: color .16s var(--ease-hover); }
+.file .nm:hover { color: var(--ink-2); }
+
+/* 资源库 / 目录：一项一卡 */
+.bar { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 12px 16px; }
+.crumbs { font-size: 14px; color: var(--ink-3); overflow-wrap: anywhere; line-height: 1.6; }
+.crumbs a { color: var(--ink-2); transition: color .16s var(--ease-hover); }
+.crumbs a:hover { color: var(--ink); }
+.crumbs .cur { color: var(--ink); font-weight: 600; }
+.crumbs .sep { margin: 0 6px; }
+.grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(300px, 1fr)); gap: 14px; }
+.card { display: flex; flex-direction: column; gap: 10px; padding: 18px 18px 14px; border-radius: var(--radius); background: var(--raise); box-shadow: inset 0 0 0 1px var(--line);
+  transition: background .16s var(--ease-hover); }
+.card:hover { background: var(--raise-hover); }
+.card .top { display: flex; align-items: baseline; gap: 10px; }
+.card .ttl { flex: 1; min-width: 0; font-size: 17px; font-weight: 650; letter-spacing: -0.015em; line-height: 1.3; overflow-wrap: anywhere; }
+.card .ttl:hover { color: var(--ink-2); }
+.card .ver { font-family: var(--mono); font-size: 12px; color: var(--ink-3); flex: none; }
+.card .cdesc { font-size: 14px; line-height: 1.65; color: var(--ink-2); }
+.card .foot { margin-top: auto; padding-top: 6px; display: flex; align-items: center; justify-content: space-between; gap: 12px; }
+.card .sz { font-family: var(--mono); font-size: 13px; color: var(--ink-3); }
+.folder { display: flex; align-items: center; gap: 12px; }
+.folder svg { width: 22px; height: 22px; color: var(--kc); flex: none; }
+.empty { padding: 40px 0; color: var(--ink-3); font-size: 14px; border-top: 1px solid var(--line); }
+
+@media (max-width: 760px) {
+  :root { --pad: 22px; }
+  .brandrow { padding: 20px 0; }
+  .main { gap: 32px; padding-top: 3vh; }
+  .page.single .main { padding-bottom: 8vh; }
+  h1 { font-size: clamp(34px, 10vw, 46px); }
+  h1.long { font-size: 26px; }
+  .desc { font-size: 15px; }
+  .page.single .acts .btn { flex: 1; }
+  .file { flex-wrap: wrap; }
+  .file .nm { flex-basis: 100%; }
+  .file .chips { flex: 1; }
+  .grid { grid-template-columns: 1fr; }
+}
+`;
+
+const GLYPH = {
+  arrow: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 4v12M7 11l5 5 5-5M5 20h14"/></svg>',
+  folder: '<svg viewBox="0 0 24 24" fill="currentColor"><path d="M3 7.5A2.5 2.5 0 0 1 5.5 5h3.6a2 2 0 0 1 1.5.68L12 7.2h6.5A2.5 2.5 0 0 1 21 9.7v7.8a2.5 2.5 0 0 1-2.5 2.5h-13A2.5 2.5 0 0 1 3 17.5z"/></svg>',
+};
+
 function htmlEsc(s) {
-  return String(s)
-    .replace(/&/g, '&amp;')
-    .replace(/</g, '&lt;')
-    .replace(/>/g, '&gt;')
-    .replace(/"/g, '&quot;');
-}
-
-/** 列表页头像 / favicon 用首字符（支持中文等多字节） */
-function pageAvatarInitial(displayLabel) {
-  const s = String(displayLabel || '').trim();
-  if (!s) return '?';
-  const first = [...s][0];
-  return first || '?';
-}
-
-function svgTextEsc(s) {
   return String(s)
     .replace(/&/g, '&amp;')
     .replace(/</g, '&lt;')
@@ -32,352 +122,162 @@ function formatPlainMultiline(s) {
     .replace(/\n/g, '<br />');
 }
 
-function renderDownload404Html() {
-  return `<!DOCTYPE html><html lang="zh"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>文件不存在 — ReleaseHub</title></head><body style="margin:0;min-height:100vh;display:flex;align-items:center;justify-content:center;background:#0c0b09;color:#ebe6df;font-family:system-ui,sans-serif;padding:24px">
-<div style="text-align:center;max-width:420px">
-<p style="font-size:12px;letter-spacing:.35em;text-transform:uppercase;color:#e8a035;margin-bottom:12px">ReleaseHub</p>
-<h1 style="font-size:20px;font-weight:800;margin:0 0 10px">文件不存在</h1>
-<p style="color:#9a9288;font-size:14px;line-height:1.6;margin:0">该资源可能已删除或链接有误。</p>
-</div></body></html>`;
+const descHtml = s => (s && String(s).trim() ? `<div class="desc">${formatPlainMultiline(String(s).trim())}</div>` : '');
+const chip = (text, cls = '') => `<span class="chip${cls ? ` ${cls}` : ''}">${htmlEsc(text)}</span>`;
+const kindChip = kind => `<span class="chip k">${KIND[kind].label}</span>`;
+const sizeChip = size => chip(fmtBytesServer(size), 'num');
+// 平台胶囊只在能认出平台时出现（WIN / MAC / LINUX / SIG）；认不出的 FILE 不带信息
+const platformChip = badge => (badge.cls === 'file' ? '' : chip(badge.label));
+const LONG_TITLE = 24;   // 超过这么多字的标题按 h1.long 排
+const titleH1 = t => `<h1${[...String(t)].length > LONG_TITLE ? ' class="long"' : ''}>${htmlEsc(t)}</h1>`;
+const verChip = v => (v != null && String(v).trim() ? chip(String(v).trim(), 'num') : '');
+
+/** favicon：夜色方块 + 类型色首字（支持中文等多字节） */
+function faviconHref(label, kind) {
+  const first = [...String(label || '').trim()][0] || '?';
+  const svg = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32"><rect width="32" height="32" rx="8" fill="#0c0c0e"/><rect x=".5" y=".5" width="31" height="31" rx="7.5" fill="none" stroke="#ffffff" stroke-opacity=".1"/><text x="16" y="21.5" text-anchor="middle" fill="${KIND[kind].color}" font-size="16" font-weight="700" font-family="system-ui,sans-serif">${htmlEsc(first)}</text></svg>`;
+  return `data:image/svg+xml,${encodeURIComponent(svg)}`;
 }
 
+/** 所有分享页的外壳：顶部字标 + 主区。layout = 'single'（单幅，竖向居中）| 'list'（标题区 + 列表） */
+function shell({ title, kind, iconLabel, layout, main, script = '' }) {
+  return `<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+<meta name="color-scheme" content="dark">
+<link rel="icon" href="${faviconHref(iconLabel, kind)}" type="image/svg+xml">
+<title>${htmlEsc(title)}</title>
+<style>${PAGE_CSS}</style>
+</head>
+<body>
+<div class="page ${layout}" style="--kc:${KIND[kind].color}">
+  <header class="brandrow"><span class="wm">ooooxo</span></header>
+  <main class="main">${main}</main>
+</div>
+${script}
+</body>
+</html>`;
+}
+
+const dlButton = (href, cls, label = '下载') =>
+  `<a class="btn ${cls}" href="${htmlEsc(href)}" download rel="noopener">${GLYPH.arrow}${label}</a>`;
+
+function renderNotice(title, text, kind = 'app') {
+  return shell({
+    title: `${title} — ooooxo`,
+    kind,
+    iconLabel: '!',
+    layout: 'single',
+    main: `<section class="hero"><h1>${htmlEsc(title)}</h1><div class="desc">${htmlEsc(text)}</div></section>`,
+  });
+}
+
+function renderDownload404Html() {
+  return renderNotice('文件不存在', '它可能已被删除，或者链接有误。');
+}
+
+/** 应用单文件落地页 */
 function renderDownloadPageHtml(opts) {
   const { displayLabel, version, filename, size, badge, downloadHref } = opts;
-  const cls = badge.cls;
-  const badgeStyle =
-    cls === 'sig'
-      ? 'background:rgba(167,139,250,.12);border-color:rgba(167,139,250,.4);color:#a78bfa'
-      : cls === 'win'
-        ? 'background:rgba(110,181,255,.1);border-color:rgba(110,181,255,.35);color:#6eb5ff'
-        : cls === 'linux'
-          ? 'background:rgba(82,212,138,.1);border-color:rgba(82,212,138,.35);color:#52d48a'
-          : cls === 'mac'
-            ? 'background:rgba(232,160,53,.12);border-color:rgba(232,160,53,.35);color:#e8a035'
-            : 'background:rgba(235,230,223,.06);border-color:rgba(235,230,223,.12);color:#9a9288';
-  const pageTitle = `${displayLabel} · ${version} — ${filename}`;
-  return `<!DOCTYPE html>
-<html lang="zh">
-<head>
-<meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1.0">
-<link rel="preconnect" href="https://fonts.googleapis.com">
-<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-<link href="https://fonts.googleapis.com/css2?family=Manrope:wght@600;700;800&display=swap" rel="stylesheet">
-<title>${htmlEsc(pageTitle)}</title>
-<style>
-:root { --bg:#0c0b09; --text:#ebe6df; --text2:#9a9288; --text3:#6b6459; --accent:#e8a035; --border:rgba(235,230,223,0.08); }
-*{box-sizing:border-box;margin:0;padding:0}
-body{font-family:'Manrope',system-ui,sans-serif;background:var(--bg);color:var(--text);min-height:100vh;display:flex;flex-direction:column;align-items:center;justify-content:center;padding:28px 20px}
-body::before{content:'';position:fixed;inset:0;background-image:linear-gradient(rgba(232,160,53,.028) 1px,transparent 1px),linear-gradient(90deg,rgba(232,160,53,.028) 1px,transparent 1px);background-size:24px 24px;pointer-events:none;z-index:0}
-.wrap{position:relative;z-index:1;width:100%;max-width:480px}
-.brand{font-size:11px;font-weight:700;color:var(--accent);letter-spacing:.35em;text-transform:uppercase;margin-bottom:16px;text-align:center}
-.hero{display:flex;flex-direction:column;align-items:center;gap:8px;margin-bottom:20px;text-align:center}
-.app-title{font-size:26px;font-weight:800;line-height:1.2;letter-spacing:-.03em;margin:0;max-width:100%}
-.ver-mark{font-family:ui-monospace,'Cascadia Code','Segoe UI Mono',monospace;font-size:13px;font-weight:600;color:var(--text3);letter-spacing:.06em}
-.card{border:1px solid var(--border);background:linear-gradient(165deg,#12100e 0%,#1a1714 100%);border-radius:10px;padding:28px 24px;box-shadow:0 24px 48px rgba(0,0,0,.35)}
-.filename{font-size:17px;font-weight:700;word-break:break-all;line-height:1.45;margin-bottom:14px}
-.row{display:flex;flex-wrap:wrap;align-items:center;gap:10px 16px;margin-bottom:22px;font-size:14px;color:var(--text2)}
-.badge{display:inline-flex;align-items:center;font-size:10px;letter-spacing:.6px;padding:4px 8px;border:1px solid;border-radius:4px;text-transform:uppercase;font-weight:600;${badgeStyle}}
-.btn{display:inline-flex;align-items:center;justify-content:center;gap:8px;width:100%;padding:14px 20px;font-size:15px;font-weight:700;letter-spacing:.5px;text-transform:uppercase;text-decoration:none;border-radius:6px;border:none;cursor:pointer;background:linear-gradient(180deg,#f0b24a 0%,var(--accent) 100%);color:#1a1208;transition:filter .15s,box-shadow .15s}
-.btn:hover{filter:brightness(1.06);box-shadow:0 0 24px rgba(232,160,53,.25)}
-.footer{margin-top:28px;text-align:center;font-size:11px;color:var(--text2);letter-spacing:.2px}
-</style>
-</head>
-<body>
-<div class="wrap">
-  <div class="brand">ReleaseHub</div>
-  <div class="hero">
-    <h1 class="app-title">${htmlEsc(displayLabel)}</h1>
-    <span class="ver-mark">${htmlEsc(version)}</span>
-  </div>
-  <div class="card">
-    <div class="filename">${htmlEsc(filename)}</div>
-    <div class="row">
-      <span>大小：<strong style="color:var(--text)">${htmlEsc(fmtBytesServer(size))}</strong></span>
-      <span class="badge">${htmlEsc(badge.label)}</span>
-    </div>
-    <a class="btn" href="${htmlEsc(downloadHref)}" download rel="noopener">⬇ 立即下载</a>
-  </div>
-  <p class="footer">Powered by ReleaseHub</p>
-</div>
-</body>
-</html>`;
+  return shell({
+    title: `${displayLabel} · ${version} — ${filename}`,
+    kind: 'app',
+    iconLabel: displayLabel,
+    layout: 'single',
+    main: `<section class="hero">
+    <div class="chips">${kindChip('app')}${verChip(version)}${platformChip(badge)}${sizeChip(size)}</div>
+    <h1>${htmlEsc(displayLabel)}</h1>
+    <div class="fname">${htmlEsc(filename)}</div>
+    <div class="acts">${dlButton(downloadHref, 'p', '立即下载')}</div>
+  </section>`,
+  });
 }
 
-/** 公开「应用 + 版本」页：文件名进详情页，右侧直链下载；不展示包名，可展示简介 */
+/** 公开「应用 + 版本」页：文件名进落地页，行尾直链下载；不展示包名，可展示简介 */
 function renderVersionBrowserHtml(opts) {
   const { displayLabel, version, files, description } = opts;
-  const initial = pageAvatarInitial(displayLabel);
-  const initialSvg = svgTextEsc(initial);
-  const faviconSvg = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32"><rect width="32" height="32" rx="8" fill="#e8a035"/><text x="16" y="21" text-anchor="middle" fill="#1a1208" font-size="15" font-weight="700" font-family="system-ui,sans-serif">${initialSvg}</text></svg>`;
-  const faviconHref = `data:image/svg+xml,${encodeURIComponent(faviconSvg)}`;
-  const pageTitle = `${displayLabel} · ${version}`.trim();
-  const introHtml =
-    description && String(description).trim()
-      ? `<div class="intro">${formatPlainMultiline(String(description).trim())}</div>`
-      : '';
-  const rows = (files || [])
+  const list = files || [];
+  // 只有一个文件时它就是本页唯一的主操作；多个文件时每行平级
+  const btnCls = list.length === 1 ? 'p sm' : 'g sm';
+  const rows = list
     .map(
-      f => `<li class="file-row">
-  <a class="file-link" href="${htmlEsc(f.landingHref)}">${htmlEsc(f.name)}</a>
-  <span class="sz">${htmlEsc(fmtBytesServer(f.size))}</span>
-  <a class="btn-dl" href="${htmlEsc(f.directHref)}" download rel="noopener">⬇ 下载</a>
-</li>`,
+      f => `<li class="file">
+      <a class="nm" href="${htmlEsc(f.landingHref)}">${htmlEsc(f.name)}</a>
+      <span class="chips">${platformChip(fileBadgeLabel(f.name))}${sizeChip(f.size)}</span>
+      ${dlButton(f.directHref, btnCls)}
+    </li>`,
     )
     .join('');
-  return `<!DOCTYPE html>
-<html lang="zh">
-<head>
-<meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1.0">
-<link rel="icon" href="${faviconHref}" type="image/svg+xml">
-<link rel="preconnect" href="https://fonts.googleapis.com">
-<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-<link href="https://fonts.googleapis.com/css2?family=Fraunces:ital,opsz,wght@0,9..144,480;0,9..144,560;1,9..144,450&family=Manrope:wght@600;700;800&display=swap" rel="stylesheet">
-<title>${htmlEsc(pageTitle)}</title>
-<style>
-:root { --bg:#0c0b09; --text:#ebe6df; --text2:#9a9288; --text3:#6b6459; --accent:#e8a035; --border:rgba(235,230,223,0.08); --intro:#e3ddd4; }
-*{box-sizing:border-box;margin:0;padding:0}
-body{font-family:'Manrope',system-ui,sans-serif;background:var(--bg);color:var(--text);min-height:100vh;min-height:100dvh;margin:0;padding:24px 20px;display:flex;flex-direction:column;align-items:center;justify-content:center}
-body::before{content:'';position:fixed;inset:0;background-image:linear-gradient(rgba(232,160,53,.028) 1px,transparent 1px),linear-gradient(90deg,rgba(232,160,53,.028) 1px,transparent 1px);background-size:24px 24px;pointer-events:none;z-index:0}
-.wrap{position:relative;z-index:1;width:100%;max-width:560px;display:flex;flex-direction:column;align-items:center;text-align:center}
-.page-avatar{width:72px;height:72px;margin:0 auto 18px;border-radius:18px;background:linear-gradient(145deg,#f0b24a 0%,var(--accent) 100%);display:flex;align-items:center;justify-content:center;font-size:28px;font-weight:800;color:#1a1208;box-shadow:0 12px 32px rgba(232,160,53,.2);letter-spacing:0;flex-shrink:0}
-.hero{display:flex;flex-direction:column;align-items:center;gap:8px;margin:0 0 18px;text-align:center;max-width:100%}
-.app-title{font-size:28px;font-weight:800;line-height:1.2;letter-spacing:-.035em;margin:0;max-width:100%;color:var(--text)}
-.ver-mark{font-family:ui-monospace,'Cascadia Code','Segoe UI Mono',monospace;font-size:13px;font-weight:600;color:var(--text3);letter-spacing:.07em}
-.intro{width:100%;text-align:center;color:var(--intro);font-size:15px;font-weight:500;line-height:1.75;margin:0 auto 24px;padding:0 10px;max-width:38rem;font-family:'Fraunces','Noto Serif SC','Source Han Serif CN',serif}
-.card{width:100%;text-align:left;border:1px solid var(--border);background:linear-gradient(165deg,#12100e 0%,#1a1714 100%);border-radius:10px;padding:8px 0 4px;box-shadow:0 24px 48px rgba(0,0,0,.35)}
-ul{list-style:none}
-.file-row{display:flex;align-items:center;gap:10px 14px;padding:14px 16px;border-top:1px solid var(--border);font-size:14px}
-.file-row:first-child{border-top:none}
-.file-link{flex:1;min-width:0;word-break:break-all;color:var(--accent);text-decoration:none;font-weight:600}
-.file-link:hover{text-decoration:underline}
-.sz{color:var(--text2);font-size:12px;white-space:nowrap;flex-shrink:0}
-.btn-dl{display:inline-flex;align-items:center;justify-content:center;flex-shrink:0;padding:9px 16px;font-size:12px;font-weight:700;letter-spacing:.4px;text-transform:uppercase;text-decoration:none;border-radius:6px;background:linear-gradient(180deg,#f0b24a 0%,var(--accent) 100%);color:#1a1208;transition:filter .15s,box-shadow .15s}
-.btn-dl:hover{filter:brightness(1.06);box-shadow:0 0 18px rgba(232,160,53,.22)}
-</style>
-</head>
-<body>
-<div class="wrap">
-  <div class="page-avatar" aria-hidden="true">${htmlEsc(initial)}</div>
-  <div class="hero">
-    <h1 class="app-title">${htmlEsc(displayLabel)}</h1>
-    <span class="ver-mark">${htmlEsc(version)}</span>
-  </div>
-  ${introHtml}
-  <div class="card">
-    <ul>${rows || '<li class="file-row" style="color:var(--text2);justify-content:center">暂无文件</li>'}</ul>
-  </div>
-</div>
-</body>
-</html>`;
-}
-
-function resourceLibraryPublicStyles() {
-  return `
-:root { --bg:#0a0908; --text:#f0ebe3; --text2:#9a9288; --text3:#6b6459; --accent:#e8a035; --border:rgba(235,230,223,0.09); --desc:#e3ddd4; }
-*{box-sizing:border-box;margin:0;padding:0}
-body{font-family:'Manrope',system-ui,sans-serif;background:var(--bg);color:var(--text);min-height:100vh;min-height:100dvh;margin:0;padding:24px 20px 40px;display:flex;flex-direction:column;align-items:center}
-body::before{content:'';position:fixed;inset:0;background-image:linear-gradient(rgba(232,160,53,.022) 1px,transparent 1px),linear-gradient(90deg,rgba(232,160,53,.022) 1px,transparent 1px);background-size:28px 28px;pointer-events:none;z-index:0}
-.wrap{position:relative;z-index:1;width:100%;max-width:1040px;display:flex;flex-direction:column;align-items:center}
-.page-avatar{width:72px;height:72px;margin:0 auto 20px;border-radius:18px;background:linear-gradient(145deg,#f0b24a 0%,var(--accent) 100%);display:flex;align-items:center;justify-content:center;font-size:28px;font-weight:800;color:#1a1208;box-shadow:0 12px 32px rgba(232,160,53,.2);letter-spacing:0;flex-shrink:0;font-family:'Manrope',system-ui,sans-serif}
-h1{font-family:'Manrope',system-ui,sans-serif;font-size:24px;font-weight:800;margin:0 0 14px;text-align:center;line-height:1.25;max-width:100%;letter-spacing:-.02em}
-.kicker{margin:-8px auto 16px;font-size:12px;letter-spacing:.2em;text-transform:uppercase;color:var(--accent);text-align:center}
-.intro{width:100%;text-align:center;color:var(--text2);font-size:14px;line-height:1.75;margin:0 auto 22px;padding:0 8px;max-width:42rem;font-family:'Fraunces','Noto Serif SC','Source Han Serif CN',serif;font-weight:450}
-.browse-toolbar{width:100%;display:flex;flex-wrap:wrap;align-items:center;justify-content:space-between;gap:12px 16px;margin:0 0 18px;padding:12px 14px;border:1px solid var(--border);border-radius:10px;background:rgba(0,0,0,.22)}
-.breadcrumbs{font-size:13px;flex:1;min-width:0;overflow-wrap:anywhere;line-height:1.5}
-.crumb{color:var(--accent);text-decoration:none;font-weight:600}
-.crumb:hover{text-decoration:underline;text-underline-offset:3px}
-.crumb.current{color:var(--text);font-weight:700}
-.crumb-sep{margin:0 5px;opacity:.45;color:var(--text3)}
-.btn-zip{display:inline-flex;align-items:center;padding:8px 14px;font-size:11px;font-weight:800;letter-spacing:.08em;text-transform:uppercase;text-decoration:none;border-radius:7px;background:linear-gradient(180deg,#f0b24a 0%,var(--accent) 100%);color:#1a1208;font-family:'Manrope',system-ui,sans-serif;flex-shrink:0}
-.btn-zip:hover{filter:brightness(1.06);box-shadow:0 0 20px rgba(232,160,53,.28)}
-.items-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(300px,1fr));gap:18px;width:100%;align-items:stretch}
-.res-card{position:relative;border:1px solid var(--border);background:linear-gradient(168deg,#14110e 0%,#0e0c0a 52%,#12100e 100%);border-radius:12px;padding:0;box-shadow:0 20px 50px rgba(0,0,0,.42),inset 0 1px 0 rgba(255,255,255,.04);display:flex;flex-direction:column;text-align:left;min-height:100%;overflow:hidden;transition:border-color .22s ease,box-shadow .22s ease,transform .22s ease}
-.res-card:hover,.res-card:focus-within{border-color:rgba(232,160,53,.38);box-shadow:0 26px 56px rgba(0,0,0,.48),0 0 0 1px rgba(232,160,53,.12),inset 0 1px 0 rgba(255,255,255,.06);transform:translateY(-2px)}
-.res-card--folder .res-card-head{border-bottom:none;padding-bottom:8px}
-.res-card-folder-link{display:flex;align-items:center;gap:12px;text-decoration:none;color:inherit;padding:2px 0}
-.folder-glyph{font-size:28px;line-height:1}
-.folder-name{font-weight:700;font-size:17px;color:var(--accent);letter-spacing:-.015em}
-.folder-sub{display:block;font-size:12px;color:var(--text3);margin-top:4px;font-weight:600}
-.path-hint{display:block;font-size:11px;color:var(--text3);margin-top:6px;font-family:ui-monospace,'Cascadia Code','Segoe UI Mono',monospace;font-weight:500;overflow-wrap:anywhere}
-.res-card-head{padding:15px 16px 14px;border-bottom:1px solid var(--border)}
-.res-card-title-row{display:flex;flex-wrap:wrap;align-items:baseline;justify-content:space-between;gap:8px 14px}
-.res-card-title{display:block;flex:1;min-width:0;color:var(--accent);text-decoration:none;font-weight:700;font-size:17px;line-height:1.3;word-break:break-word;letter-spacing:-.015em;font-family:'Manrope',system-ui,sans-serif}
-.res-card-title:hover{text-decoration:underline;text-underline-offset:3px}
-.res-card-ver{font-family:ui-monospace,'Cascadia Code','Segoe UI Mono',monospace;font-size:12px;font-weight:600;color:var(--text3);letter-spacing:.06em;flex-shrink:0}
-.res-card-main{flex:1;min-height:0;display:flex;flex-direction:column}
-.res-card-desc{padding:14px 16px 10px;font-family:'Fraunces','Noto Serif SC','Source Han Serif CN',serif;font-size:15px;font-weight:500;font-style:normal;color:var(--desc);line-height:1.72;letter-spacing:.01em}
-.res-card-foot{margin-top:auto;display:flex;flex-wrap:wrap;align-items:center;justify-content:space-between;gap:12px;padding:11px 16px 12px;border-top:1px solid var(--border);background:rgba(0,0,0,.18)}
-@media (prefers-reduced-motion:reduce){.res-card,.res-card:hover,.res-card:focus-within{transition:border-color .2s ease,box-shadow .2s ease;transform:none}}
-.res-sz{font-family:ui-monospace,'Cascadia Code','Segoe UI Mono',monospace;font-size:13px;font-weight:600;color:var(--text);letter-spacing:.04em;opacity:.92}
-.btn-dl{display:inline-flex;align-items:center;justify-content:center;padding:8px 15px;font-size:11px;font-weight:800;letter-spacing:.12em;text-transform:uppercase;text-decoration:none;border-radius:7px;background:linear-gradient(180deg,#f0b24a 0%,var(--accent) 100%);color:#1a1208;transition:filter .15s,box-shadow .15s,transform .12s;font-family:'Manrope',system-ui,sans-serif}
-.btn-dl:hover{filter:brightness(1.06);box-shadow:0 0 20px rgba(232,160,53,.28);transform:translateY(-1px)}
-.btn-dl--ghost{background:transparent;border:1px solid rgba(232,160,53,.35);color:#f0c978}
-.btn-dl--ghost:hover{background:rgba(232,160,53,.1);box-shadow:none;transform:none}
-.res-empty{width:100%;text-align:center;color:var(--text2);font-size:14px;padding:32px 16px;border:1px dashed var(--border);border-radius:8px}`;
+  return shell({
+    title: `${displayLabel} · ${version}`.trim(),
+    kind: 'app',
+    iconLabel: displayLabel,
+    layout: 'list',
+    main: `<section class="hero">
+    <div class="chips">${kindChip('app')}${verChip(version)}</div>
+    <h1>${htmlEsc(displayLabel)}</h1>
+    ${descHtml(description)}
+  </section>
+  ${rows ? `<ul class="files">${rows}</ul>` : '<div class="empty">这个版本还没有文件</div>'}`,
+  });
 }
 
 function buildResourceFileCardHtml(it) {
   const title = (it.displayName && String(it.displayName).trim()) || it.fileName;
-  const verRaw = it.version != null && String(it.version).trim() ? String(it.version).trim() : '';
-  const verHtml = verRaw ? `<span class="res-card-ver">${htmlEsc(verRaw)}</span>` : '';
-  const descInner =
-    it.description && String(it.description).trim()
-      ? `<div class="res-card-desc">${formatPlainMultiline(String(it.description).trim())}</div>`
-      : '';
-  const mainBlock = descInner ? `<div class="res-card-main">${descInner}</div>` : '';
-  const pathHint =
-    it.fileName && String(title) !== String(it.fileName)
-      ? `<span class="path-hint">${htmlEsc(it.fileName)}</span>`
-      : '';
-  const landing = it.landingHref || it.directHref || '#';
-  return `<article class="res-card">
-  <header class="res-card-head">
-    <div class="res-card-title-row">
-      <a class="res-card-title" href="${htmlEsc(landing)}">${htmlEsc(title)}</a>
-      ${verHtml}
-    </div>
-    ${pathHint}
-  </header>
-  ${mainBlock}
-  <footer class="res-card-foot">
-    <span class="res-sz">${htmlEsc(fmtBytesServer(it.size))}</span>
-    <a class="btn-dl" href="${htmlEsc(it.directHref)}" download rel="noopener">⬇ 下载</a>
-  </footer>
-</article>`;
+  const ver = it.version != null && String(it.version).trim() ? `<span class="ver">${htmlEsc(String(it.version).trim())}</span>` : '';
+  const fname = it.fileName && String(title) !== String(it.fileName) ? `<div class="fname">${htmlEsc(it.fileName)}</div>` : '';
+  const desc = it.description && String(it.description).trim() ? `<div class="cdesc">${formatPlainMultiline(String(it.description).trim())}</div>` : '';
+  return `<article class="card">
+    <div class="top"><a class="ttl" href="${htmlEsc(it.landingHref || it.directHref || '#')}">${htmlEsc(title)}</a>${ver}</div>
+    ${fname}${desc}
+    <div class="foot"><span class="sz">${htmlEsc(fmtBytesServer(it.size))}</span>${dlButton(it.directHref, 'g sm')}</div>
+  </article>`;
 }
 
 function buildFolderCardHtml(f) {
-  return `<article class="res-card res-card--folder">
-  <header class="res-card-head">
-    <a class="res-card-folder-link" href="${htmlEsc(f.browseUrl || '#')}">
-      <span class="folder-glyph" aria-hidden="true">📁</span>
-      <div>
-        <span class="folder-name">${htmlEsc(f.name)}</span>
-        <span class="folder-sub">进入文件夹</span>
-      </div>
-    </a>
-  </header>
-  <footer class="res-card-foot">
-    <span class="res-sz">文件夹</span>
-    <a class="btn-dl btn-dl--ghost" href="${htmlEsc(f.archiveUrl || '#')}">ZIP</a>
-  </footer>
-</article>`;
+  return `<article class="card">
+    <div class="top"><a class="folder ttl" href="${htmlEsc(f.browseUrl || '#')}">${GLYPH.folder}<span>${htmlEsc(f.name)}</span></a></div>
+    <div class="foot"><span class="sz">文件夹</span><a class="btn g sm" href="${htmlEsc(f.archiveUrl || '#')}">打包 ZIP</a></div>
+  </article>`;
 }
 
-/** 资源库公开页：与后台版本卡片类似的响应式网格，每项一卡 */
+/** 资源库公开页：一项一卡 */
 function renderResourceLibraryHtml(opts) {
   const { displayLabel, description, items } = opts;
-  const initial = pageAvatarInitial(displayLabel);
-  const initialSvg = svgTextEsc(initial);
-  const faviconSvg = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32"><rect width="32" height="32" rx="8" fill="#e8a035"/><text x="16" y="21" text-anchor="middle" fill="#1a1208" font-size="15" font-weight="700" font-family="system-ui,sans-serif">${initialSvg}</text></svg>`;
-  const faviconHref = `data:image/svg+xml,${encodeURIComponent(faviconSvg)}`;
-  const introHtml =
-    description && String(description).trim()
-      ? `<div class="intro">${formatPlainMultiline(String(description).trim())}</div>`
-      : '';
   const list = items || [];
-  const cards = list.map(buildResourceFileCardHtml).join('');
-  const gridInner =
-    list.length === 0
-      ? '<div class="res-empty">暂无资源</div>'
-      : `<div class="items-grid">${cards}</div>`;
-  return `<!DOCTYPE html>
-<html lang="zh">
-<head>
-<meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1.0">
-<link rel="icon" href="${faviconHref}" type="image/svg+xml">
-<link rel="preconnect" href="https://fonts.googleapis.com">
-<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-<link href="https://fonts.googleapis.com/css2?family=Fraunces:ital,opsz,wght@0,9..144,480;0,9..144,560;1,9..144,450&family=Manrope:wght@600;700;800&display=swap" rel="stylesheet">
-<title>${htmlEsc(displayLabel)} — 资源库</title>
-<style>${resourceLibraryPublicStyles()}</style>
-</head>
-<body>
-<div class="wrap">
-  <div class="page-avatar" aria-hidden="true">${htmlEsc(initial)}</div>
-  <h1>${htmlEsc(displayLabel)}</h1>
-  <p class="kicker">资源库</p>
-  ${introHtml}
-  ${gridInner}
-</div>
-</body>
-</html>`;
+  return shell({
+    title: `${displayLabel} — 资源库`,
+    kind: 'resource',
+    iconLabel: displayLabel,
+    layout: 'list',
+    main: `<section class="hero">
+    <div class="chips">${kindChip('resource')}${list.length ? chip(`${list.length} 个文件`) : ''}</div>
+    <h1>${htmlEsc(displayLabel)}</h1>
+    ${descHtml(description)}
+  </section>
+  ${list.length ? `<div class="grid">${list.map(buildResourceFileCardHtml).join('')}</div>` : '<div class="empty">这个资源库还是空的</div>'}`,
+  });
 }
 
 /** 资源库单文件落地页 */
 function renderResourceItemLandingHtml(opts) {
   const { libraryName, displayTitle, itemVersion, filename, description, size, badge, downloadHref } = opts;
-  const cls = badge.cls;
-  const badgeStyle =
-    cls === 'sig'
-      ? 'background:rgba(167,139,250,.12);border-color:rgba(167,139,250,.4);color:#a78bfa'
-      : cls === 'win'
-        ? 'background:rgba(110,181,255,.1);border-color:rgba(110,181,255,.35);color:#6eb5ff'
-        : cls === 'linux'
-          ? 'background:rgba(82,212,138,.1);border-color:rgba(82,212,138,.35);color:#52d48a'
-          : cls === 'mac'
-            ? 'background:rgba(232,160,53,.12);border-color:rgba(232,160,53,.35);color:#e8a035'
-            : 'background:rgba(235,230,223,.06);border-color:rgba(235,230,223,.12);color:#9a9288';
-  const descBlock =
-    description && String(description).trim()
-      ? `<div style="margin:0 0 18px;font-size:14px;color:var(--text2);line-height:1.65;text-align:left">${formatPlainMultiline(String(description).trim())}</div>`
-      : '';
-  const verRaw = itemVersion != null && String(itemVersion).trim() ? String(itemVersion).trim() : '';
-  const titleRowVer = verRaw
-    ? `<span class="item-ver">${htmlEsc(verRaw)}</span>`
-    : '';
-  return `<!DOCTYPE html>
-<html lang="zh">
-<head>
-<meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>${htmlEsc(displayTitle || filename)} — ReleaseHub</title>
-<style>
-:root { --bg:#0c0b09; --text:#ebe6df; --text2:#9a9288; --text3:#6b6459; --accent:#e8a035; --border:rgba(235,230,223,0.08); }
-*{box-sizing:border-box;margin:0;padding:0}
-body{font-family:system-ui,-apple-system,"Segoe UI",Roboto,sans-serif;background:var(--bg);color:var(--text);min-height:100vh;display:flex;flex-direction:column;align-items:center;justify-content:center;padding:28px 20px}
-body::before{content:'';position:fixed;inset:0;background-image:linear-gradient(rgba(232,160,53,.028) 1px,transparent 1px),linear-gradient(90deg,rgba(232,160,53,.028) 1px,transparent 1px);background-size:24px 24px;pointer-events:none;z-index:0}
-.wrap{position:relative;z-index:1;width:100%;max-width:480px}
-.brand{font-size:11px;font-weight:700;color:var(--accent);letter-spacing:.35em;text-transform:uppercase;margin-bottom:18px;text-align:center}
-.meta{font-size:14px;color:var(--text2);text-align:center;margin-bottom:22px;line-height:1.5}
-.meta strong{color:var(--text);font-weight:600}
-.card{border:1px solid var(--border);background:linear-gradient(165deg,#12100e 0%,#1a1714 100%);border-radius:8px;padding:28px 24px;box-shadow:0 24px 48px rgba(0,0,0,.35)}
-.title-row{display:flex;flex-wrap:wrap;align-items:baseline;justify-content:space-between;gap:8px 12px;margin-bottom:14px}
-.filename{font-size:17px;font-weight:700;word-break:break-word;line-height:1.45;flex:1;min-width:0}
-.item-ver{font-family:ui-monospace,'Cascadia Code','Segoe UI Mono',monospace;font-size:12px;font-weight:600;color:var(--text3);letter-spacing:.06em;flex-shrink:0}
-.row{display:flex;flex-wrap:wrap;align-items:center;gap:10px 16px;margin-bottom:22px;font-size:14px;color:var(--text2)}
-.badge{display:inline-flex;align-items:center;font-size:10px;letter-spacing:.6px;padding:4px 8px;border:1px solid;border-radius:4px;text-transform:uppercase;font-weight:600;${badgeStyle}}
-.btn{display:inline-flex;align-items:center;justify-content:center;gap:8px;width:100%;padding:14px 20px;font-size:15px;font-weight:700;letter-spacing:.5px;text-transform:uppercase;text-decoration:none;border-radius:6px;border:none;cursor:pointer;background:linear-gradient(180deg,#f0b24a 0%,var(--accent) 100%);color:#1a1208;transition:filter .15s,box-shadow .15s}
-.btn:hover{filter:brightness(1.06);box-shadow:0 0 24px rgba(232,160,53,.25)}
-.footer{margin-top:28px;text-align:center;font-size:11px;color:var(--text2);letter-spacing:.2px}
-</style>
-</head>
-<body>
-<div class="wrap">
-  <div class="brand">ReleaseHub · 资源库</div>
-  <p class="meta"><strong>${htmlEsc(libraryName)}</strong></p>
-  <div class="card">
-    <div class="title-row">
-      <div class="filename">${htmlEsc(displayTitle || filename)}</div>
-      ${titleRowVer}
-    </div>
-    ${descBlock}
-    <div class="row">
-      <span>文件：<strong style="color:var(--text);font-weight:600;word-break:break-all">${htmlEsc(filename)}</strong></span>
-    </div>
-    <div class="row">
-      <span>大小：<strong style="color:var(--text)">${htmlEsc(fmtBytesServer(size))}</strong></span>
-      <span class="badge">${htmlEsc(badge.label)}</span>
-    </div>
-    <a class="btn" href="${htmlEsc(downloadHref)}" download rel="noopener">⬇ 立即下载</a>
-  </div>
-  <p class="footer">Powered by ReleaseHub</p>
-</div>
-</body>
-</html>`;
+  const title = displayTitle || filename;
+  return shell({
+    title: `${title} — ${libraryName}`,
+    kind: 'resource',
+    iconLabel: title,
+    layout: 'single',
+    main: `<section class="hero">
+    <div class="chips">${kindChip('resource')}${chip(libraryName)}${verChip(itemVersion)}${platformChip(badge)}${sizeChip(size)}</div>
+    ${titleH1(title)}
+    ${descHtml(description)}
+    ${String(title) !== String(filename) ? `<div class="fname">${htmlEsc(filename)}</div>` : ''}
+    <div class="acts">${dlButton(downloadHref, 'p', '立即下载')}</div>
+  </section>`,
+  });
 }
 
 /** 内联脚本：在 data-expire-ms 的 #countdown-box 上更新剩余时间文案 */
@@ -387,163 +287,74 @@ const countdownScript = `<script>
   if (!el) return;
   var exp = parseInt(el.getAttribute("data-expire-ms"), 10) || 0;
   function fmt(s) {
-    if (s <= 0) return "已过期";
     var d = Math.floor(s / 86400);
     var h = Math.floor((s % 86400) / 3600);
     var m = Math.floor((s % 3600) / 60);
     var sec = s % 60;
-    if (d > 0) return d + " 天 " + h + " 小时 " + m + " 分钟";
-    if (h > 0) return h + " 小时 " + m + " 分 " + sec + " 秒";
-    if (m > 0) return m + " 分 " + sec + " 秒";
-    return sec + " 秒";
+    if (d > 0) return "剩 " + d + " 天 " + h + " 小时";
+    if (h > 0) return "剩 " + h + " 小时 " + m + " 分";
+    if (m > 0) return "剩 " + m + " 分 " + sec + " 秒";
+    return "剩 " + sec + " 秒";
   }
   function tick() {
     var left = Math.floor((exp - Date.now()) / 1000);
-    el.textContent = fmt(left);
     if (left <= 0) { el.textContent = "已过期"; return; }
+    el.textContent = fmt(left);
     setTimeout(tick, 1000);
   }
   tick();
 })();<\/script>`;
 
-/**
- * 临时传输 · 单页（对齐资源库单文件落地：留白、Fraunces 说明、单主按钮）
- */
+/** 临时文件 · 单文件页：剩余时间是本页的状态，放在类型胶囊旁 */
 function renderTempTransferInfoPageHtml(opts) {
   const { filename, displayTitle, size, badge, directDownloadHref, expireAtMs } = opts;
-  const cls = badge.cls;
-  const badgeStyle =
-    cls === 'sig'
-      ? 'background:rgba(167,139,250,.12);border-color:rgba(167,139,250,.4);color:#a78bfa'
-      : cls === 'win'
-        ? 'background:rgba(110,181,255,.1);border-color:rgba(110,181,255,.35);color:#6eb5ff'
-        : cls === 'linux'
-          ? 'background:rgba(82,212,138,.1);border-color:rgba(82,212,138,.35);color:#52d48a'
-          : cls === 'mac'
-            ? 'background:rgba(232,160,53,.12);border-color:rgba(232,160,53,.35);color:#e8a035'
-            : 'background:rgba(235,230,223,.06);border-color:rgba(235,230,223,.12);color:#9a9288';
   const t = String(displayTitle || filename);
-  return `<!DOCTYPE html>
-<html lang="zh">
-<head>
-<meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>${htmlEsc(t)} — 临时传输</title>
-<link rel="preconnect" href="https://fonts.googleapis.com">
-<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-<link href="https://fonts.googleapis.com/css2?family=Fraunces:ital,opsz,wght@0,9..144,500&family=Manrope:wght@600;700;800&display=swap" rel="stylesheet">
-<style>
-:root { --bg:#0a0908; --text:#f0ebe3; --text2:#9a9288; --text3:#6b6459; --accent:#e8a035; --border:rgba(235,230,223,0.1); }
-*{box-sizing:border-box;margin:0;padding:0}
-body{font-family:'Manrope',system-ui,sans-serif;background:var(--bg);color:var(--text);min-height:100vh;-webkit-font-smoothing:antialiased}
-body::before{content:'';position:fixed;inset:0;background-image:linear-gradient(rgba(232,160,53,.02) 1px,transparent 1px),linear-gradient(90deg,rgba(232,160,53,.02) 1px,transparent 1px);background-size:28px 28px;pointer-events:none;z-index:0}
-.shell{position:relative;z-index:1;width:100%;min-height:100vh;display:flex;flex-direction:column;align-items:center;padding:40px 24px 56px;max-width:560px;margin:0 auto;box-sizing:border-box}
-.kicker{text-align:center;font-size:10px;font-weight:700;letter-spacing:.32em;text-transform:uppercase;color:var(--accent);margin:0 0 8px}
-.kicker2{text-align:center;font-size:12px;letter-spacing:.2em;text-transform:uppercase;color:var(--text3);margin:0 0 28px}
-.timer-card{width:100%;border:1px solid rgba(232,160,53,.3);background:linear-gradient(145deg,rgba(232,160,53,.1) 0%,rgba(0,0,0,.28) 100%);border-radius:12px;padding:20px 24px 22px;margin-bottom:28px;box-shadow:inset 0 1px 0 rgba(255,255,255,.05)}
-.timer-lbl{font-size:10px;letter-spacing:.2em;text-transform:uppercase;color:var(--text3);text-align:center;margin-bottom:8px}
-.timer-val{text-align:center;font-size:1.35rem;font-weight:800;color:var(--accent);font-variant-numeric:tabular-nums;letter-spacing:.04em}
-.main-card{width:100%;border:1px solid var(--border);background:linear-gradient(168deg,#14110e 0%,#0e0c0a 100%);border-radius:12px;padding:32px 28px 32px;box-shadow:0 20px 56px rgba(0,0,0,.5),inset 0 1px 0 rgba(255,255,255,.05)}
-.fname{font-size:1.2rem;font-weight:800;word-break:break-word;line-height:1.35;letter-spacing:-.02em;margin:0 0 18px}
-.hint-t{font-family:'Fraunces','Noto Serif SC','Source Han Serif CN',serif;font-size:15px;font-weight:500;color:var(--text2);line-height:1.75;margin:0 0 22px}
-.meta-row{display:flex;flex-wrap:wrap;align-items:center;gap:12px 20px;margin:0 0 26px;font-size:14px;color:var(--text2);padding-bottom:22px;border-bottom:1px solid var(--border)}
-.badge-wrap{display:inline-flex;align-items:center;gap:10px;flex-wrap:wrap}
-.badge-d{font-size:10px;letter-spacing:.6px;padding:4px 9px;border:1px solid;border-radius:4px;text-transform:uppercase;font-weight:600;${badgeStyle}}
-.btn-cta{display:flex;align-items:center;justify-content:center;width:100%;box-sizing:border-box;padding:16px 24px;font-size:14px;font-weight:800;letter-spacing:.5px;text-align:center;text-decoration:none;border-radius:8px;border:none;cursor:pointer;background:linear-gradient(180deg,#f0b24a 0%,var(--accent) 100%);color:#1a1208;transition:filter .15s,box-shadow .2s,transform .12s;box-shadow:0 0 0 1px rgba(0,0,0,.2)}
-.btn-cta:hover{filter:brightness(1.06);box-shadow:0 0 28px rgba(232,160,53,.3)}
-.btn-cta:active{transform:scale(.99)}
-#countdown-box{display:block}
-</style>
-</head>
-<body>
-<div class="shell">
-  <p class="kicker">临时传输</p>
-  <p class="kicker2">单文件 · 到期删除</p>
-  <div class="timer-card">
-    <p class="timer-lbl">剩余可用时间</p>
-    <p id="countdown-box" class="timer-val" data-expire-ms="${String(Math.floor(expireAtMs))}">—</p>
-  </div>
-  <div class="main-card">
-    <h1 class="fname">${htmlEsc(t)}</h1>
-    <p class="hint-t">此链接在到期后失效，文件将从服务器上移除。你可将本页完整链接分享给需要下载的人。</p>
-    <div class="meta-row">
-      <span>大小 <strong style="color:var(--text);font-weight:600">${htmlEsc(fmtBytesServer(size))}</strong></span>
-      <span class="badge-wrap"><span class="badge-d">${htmlEsc(badge.label)}</span></span>
-    </div>
-    <a class="btn-cta" href="${htmlEsc(directDownloadHref)}" rel="noopener">下载文件</a>
-  </div>
-</div>
-${countdownScript}
-</body>
-</html>`;
+  return shell({
+    title: `${t} — 临时文件`,
+    kind: 'temp',
+    iconLabel: t,
+    layout: 'single',
+    main: `<section class="hero">
+    <div class="chips">${kindChip('temp')}<span class="chip k" id="countdown-box" data-expire-ms="${String(Math.floor(expireAtMs))}">—</span>${platformChip(badge)}${sizeChip(size)}</div>
+    ${titleH1(t)}
+    <div class="desc">到期后链接失效，文件从服务器删除。</div>
+    <div class="acts">${dlButton(directDownloadHref, 'p', '立即下载')}</div>
+  </section>`,
+    script: countdownScript,
+  });
 }
 
 function renderTempTransferGoneHtml() {
-  return `<!DOCTYPE html><html lang="zh"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>链接已失效</title>
-<style>body{margin:0;min-height:100vh;display:flex;align-items:center;justify-content:center;background:#0c0b09;color:#9a9288;font-family:system-ui,sans-serif;padding:32px 24px;text-align:center;box-sizing:border-box}h1{margin:0 0 10px;font-size:1.1rem;font-weight:800;color:#ebe6df;letter-spacing:.04em}p{margin:0;font-size:14px;line-height:1.6}</style></head>
-<body><div style="max-width:28rem"><h1>文件已删除或已过期</h1><p>此临时链接已无法使用。</p></div></body></html>`;
+  return renderNotice('链接已失效', '这个临时文件已过期或被删除。', 'temp');
 }
 
-/** 资源库 / 临时传输：目录浏览（选择性下载 + 文件夹 ZIP 直链） */
+/** 资源库 / 临时文件：目录浏览（逐个下载 + 整个目录打包 ZIP） */
 function renderFolderBrowseHtml(opts) {
-  const {
-    kind = 'resource',
-    displayLabel,
-    description,
-    breadcrumbs = [],
-    archiveUrl,
-    folders = [],
-    files = [],
-  } = opts;
-  const initial = pageAvatarInitial(displayLabel);
-  const initialSvg = svgTextEsc(initial);
-  const faviconSvg = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32"><rect width="32" height="32" rx="8" fill="#e8a035"/><text x="16" y="21" text-anchor="middle" fill="#1a1208" font-size="15" font-weight="700" font-family="system-ui,sans-serif">${initialSvg}</text></svg>`;
-  const faviconHref = `data:image/svg+xml,${encodeURIComponent(faviconSvg)}`;
-  const kindLabel = kind === 'temp' ? '临时分享' : '资源库';
-  const introHtml =
-    description && String(description).trim()
-      ? `<div class="intro">${formatPlainMultiline(String(description).trim())}</div>`
-      : '';
-  const crumbHtml = breadcrumbs
-    .map((c, i) => {
-      const isLast = i === breadcrumbs.length - 1;
-      if (isLast) return `<span class="crumb current">${htmlEsc(c.label)}</span>`;
-      const href = c.browseHref || c.href || '#';
-      return `<a class="crumb" href="${htmlEsc(href)}">${htmlEsc(c.label)}</a><span class="crumb-sep">/</span>`;
-    })
+  const { kind = 'resource', displayLabel, description, breadcrumbs = [], archiveUrl, folders = [], files = [] } = opts;
+  const crumbs = breadcrumbs
+    .map((c, i) =>
+      i === breadcrumbs.length - 1
+        ? `<span class="cur">${htmlEsc(c.label)}</span>`
+        : `<a href="${htmlEsc(c.browseHref || c.href || '#')}">${htmlEsc(c.label)}</a><span class="sep">/</span>`,
+    )
     .join('');
-  const folderCards = (folders || []).map(buildFolderCardHtml).join('');
-  const fileCards = (files || []).map(buildResourceFileCardHtml).join('');
-  const allCards = folderCards + fileCards;
-  const gridInner = allCards
-    ? `<div class="items-grid">${allCards}</div>`
-    : '<div class="res-empty">此目录为空</div>';
-  return `<!DOCTYPE html>
-<html lang="zh">
-<head>
-<meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1.0">
-<link rel="icon" href="${faviconHref}" type="image/svg+xml">
-<link rel="preconnect" href="https://fonts.googleapis.com">
-<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-<link href="https://fonts.googleapis.com/css2?family=Fraunces:ital,opsz,wght@0,9..144,480;0,9..144,560;1,9..144,450&family=Manrope:wght@600;700;800&display=swap" rel="stylesheet">
-<title>${htmlEsc(displayLabel)} — ${htmlEsc(kindLabel)}</title>
-<style>${resourceLibraryPublicStyles()}</style>
-</head>
-<body>
-<div class="wrap">
-  <div class="page-avatar" aria-hidden="true">${htmlEsc(initial)}</div>
-  <h1>${htmlEsc(displayLabel)}</h1>
-  <p class="kicker">${htmlEsc(kindLabel)}</p>
-  ${introHtml}
-  <div class="browse-toolbar">
-    <nav class="breadcrumbs" aria-label="路径">${crumbHtml}</nav>
-    <a class="btn-zip" href="${htmlEsc(archiveUrl)}">打包下载此目录 (ZIP)</a>
+  const cards = (folders || []).map(buildFolderCardHtml).join('') + (files || []).map(buildResourceFileCardHtml).join('');
+  return shell({
+    title: `${displayLabel} — ${KIND[kind].label}`,
+    kind,
+    iconLabel: displayLabel,
+    layout: 'list',
+    main: `<section class="hero">
+    <div class="chips">${kindChip(kind)}</div>
+    <h1>${htmlEsc(displayLabel)}</h1>
+    ${descHtml(description)}
+  </section>
+  <div class="bar">
+    <nav class="crumbs" aria-label="路径">${crumbs}</nav>
+    <a class="btn p sm" href="${htmlEsc(archiveUrl)}">${GLYPH.arrow}打包下载此目录</a>
   </div>
-  ${gridInner}
-</div>
-</body>
-</html>`;
+  ${cards ? `<div class="grid">${cards}</div>` : '<div class="empty">这个目录是空的</div>'}`,
+  });
 }
 
 module.exports = {
