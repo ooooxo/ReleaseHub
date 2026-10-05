@@ -7,7 +7,8 @@
     <TransitionGroup name="tray-row">
       <div v-for="t in uploads.tasks" :key="t.id" class="row" :class="`is-${t.status}`">
         <div class="r-head">
-          <span class="r-dot" />
+          <span v-if="t.status === 'done'" class="r-ok done-pop"><svg class="check-draw" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12.5l4.5 4.5L19 7.5" /></svg></span>
+          <span v-else class="r-dot" />
           <span class="r-title" v-tip="t.title">{{ t.title }}</span>
           <span class="r-pct">{{ statusText(t) }}</span>
         </div>
@@ -84,6 +85,8 @@ function copyLink(url) {
 }
 .r-head { display: flex; align-items: center; gap: 8px; }
 .r-dot { width: 7px; height: 7px; border-radius: 99px; background: var(--accent); flex: none; }
+.r-ok { flex: none; width: 15px; height: 15px; margin: 0 -4px; color: var(--green); }
+.r-ok svg { width: 100%; height: 100%; display: block; }
 .is-done .r-dot { background: var(--green); }
 .is-paused .r-dot { background: var(--amber); }
 .is-error .r-dot { background: var(--danger); }

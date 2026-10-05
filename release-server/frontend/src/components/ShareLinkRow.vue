@@ -2,11 +2,15 @@
   <div v-if="url" class="share-link-row">
     <span class="share-lbl">{{ label }}</span>
     <a class="share-url" :href="url" target="_blank" rel="noopener noreferrer" v-tip="url">{{ url }}</a>
-    <button type="button" class="btn btn-sm btn-ghost share-copy" @click="onCopy">复制</button>
+    <button type="button" class="btn btn-sm btn-ghost share-copy" :class="{ 'is-copied done-pop': copied }" @click="onCopy">
+      <template v-if="copied"><svg class="check-draw" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12.5l4.5 4.5L19 7.5" /></svg>已复制</template>
+      <template v-else>复制</template>
+    </button>
   </div>
 </template>
 
 <script setup>
+import { ref, onUnmounted } from 'vue';
 import { copyText } from '@/utils/copy-text';
 import { useToast } from '@/composables/useToast';
 
@@ -17,13 +21,21 @@ const props = defineProps({
 
 const { toast } = useToast();
 
+/* 复制成功就在按钮上原地打勾，不另弹 toast：结果出现在动作发生的地方 */
+const copied = ref(false);
+let timer = null;
 function onCopy() {
   if (!props.url) return;
   copyText(props.url).then(
-    () => toast('已复制'),
+    () => {
+      copied.value = true;
+      clearTimeout(timer);
+      timer = setTimeout(() => { copied.value = false; }, 1400);
+    },
     () => toast('复制失败', 'error'),
   );
 }
+onUnmounted(() => clearTimeout(timer));
 </script>
 
 <style scoped>
@@ -57,5 +69,15 @@ function onCopy() {
 }
 .share-copy {
   flex-shrink: 0;
+  min-width: 76px;
+}
+.share-copy.is-copied,
+.share-copy.is-copied:hover:not(:disabled) {
+  color: var(--green);
+  border-color: rgba(52, 211, 153, 0.4);
+}
+.share-copy svg {
+  width: 14px;
+  height: 14px;
 }
 </style>

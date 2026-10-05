@@ -725,3 +725,19 @@ button.app-tile.lib-card {
 }
 .tip[data-side='below'] { transform: translateY(-3px); }
 .tip.is-shown { opacity: 1; transform: none; }
+
+/* ---- 结果时刻（ADR-0006）：只有上传完成 / 复制成功 / 发布成功用弹性，日常交互不用 ----
+   .done-pop：从 --pop 弹回原大；.check-draw：勾从起笔描到收笔。reduced-motion 下 --pop=1，只剩描线 */
+@keyframes done-pop {
+  from { transform: scale(var(--pop)); }
+  to { transform: none; }
+}
+@keyframes check-draw {
+  from { stroke-dashoffset: 24; }
+  to { stroke-dashoffset: 0; }
+}
+.done-pop { animation: done-pop var(--t-slow) var(--spring-soft); }
+.check-draw path {
+  stroke-dasharray: 24;
+  animation: check-draw var(--t-slow) var(--ease-out) both;
+}

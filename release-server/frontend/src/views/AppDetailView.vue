@@ -89,7 +89,10 @@
     <div v-if="latestLoaded && published" class="published">
       <div class="pub-main">
         <span class="pub-label">当前发布</span>
-        <div class="pub-ver">{{ published.version }}</div>
+        <!-- 发布成功的结果时刻：换了版本号才弹一下，首屏不动 -->
+        <Transition name="ver-swap" mode="out-in">
+          <div :key="published.version" class="pub-ver">{{ published.version }}</div>
+        </Transition>
         <div class="pub-meta">
           <template v-if="published.pub_date">发布于 {{ fmtDate(published.pub_date) }} · </template>{{ versions.length }} 个历史版本
         </div>
@@ -929,6 +932,11 @@ watch(
 }
 
 /* 弹层 */
+.ver-swap-enter-active { transition: opacity var(--t-med) var(--ease-out), transform var(--t-slow) var(--spring-soft); }
+.ver-swap-leave-active { transition: opacity var(--t-fast) var(--ease-out); }
+.ver-swap-enter-from { opacity: 0; transform: translateY(var(--shift)) scale(var(--pop)); }
+.ver-swap-leave-to { opacity: 0; }
+
 /* 新建版本浮层 */
 .lform { width: 320px; max-width: 100%; }
 .l-title { margin: 0 0 8px; font-size: 0.95rem; font-weight: 700; }

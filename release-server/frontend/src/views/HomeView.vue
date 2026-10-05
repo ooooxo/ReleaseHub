@@ -81,8 +81,16 @@
             <div class="tt-foot">
               <span class="mini-tag" :class="{ folder: it.kind === 'folder' }">{{ it.kind === 'folder' ? '文件夹' : '单文件' }}</span>
               <span class="tt-rem">{{ remLabel(it) }}</span>
-              <button v-if="it.landingUrl" type="button" class="tt-copy" v-tip="'复制分享链'" @click.stop="copyLink(it.landingUrl)">
-                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><rect x="9" y="9" width="11" height="11" rx="2" /><path d="M5 15V5a2 2 0 0 1 2-2h10" /></svg>
+              <button
+                v-if="it.landingUrl"
+                type="button"
+                class="tt-copy"
+                :class="{ 'is-copied done-pop': copiedId === it.id }"
+                v-tip="'复制分享链'"
+                @click.stop="copyLink(it)"
+              >
+                <svg v-if="copiedId === it.id" class="check-draw" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12.5l4.5 4.5L19 7.5" /></svg>
+                <svg v-else viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><rect x="9" y="9" width="11" height="11" rx="2" /><path d="M5 15V5a2 2 0 0 1 2-2h10" /></svg>
               </button>
             </div>
           </div>
@@ -290,9 +298,16 @@ watch(
   },
 );
 
-function copyLink(url) {
-  copyText(url).then(
-    () => toast('已复制分享链'),
+/* 复制成功：字形原地换成描出来的勾，片刻后换回 */
+const copiedId = ref(null);
+let copiedTimer = null;
+function copyLink(it) {
+  copyText(it.landingUrl).then(
+    () => {
+      copiedId.value = it.id;
+      clearTimeout(copiedTimer);
+      copiedTimer = setTimeout(() => { copiedId.value = null; }, 1400);
+    },
     () => toast('复制失败', 'error'),
   );
 }
@@ -912,8 +927,14 @@ h1 {
   transition: color var(--t-fast) var(--ease-hover);
 }
 .tt-copy:hover { color: var(--accent); }
+.tt-copy.is-copied { color: var(--green); }
 .tt-copy svg { width: 15px; height: 15px; }
+/* 刚传完的那张：带弹性浮上来，绿边慢慢退回常态 */
 .temp-tile.is-fresh {
-  border-color: rgba(52, 211, 153, 0.5);
+  animation: done-pop var(--t-slow) var(--spring-soft), fresh-edge 2.4s var(--ease-out) both;
+}
+@keyframes fresh-edge {
+  from { border-color: rgba(52, 211, 153, 0.7); box-shadow: 0 0 0 3px rgba(52, 211, 153, 0.15); }
+  to { border-color: var(--border); box-shadow: none; }
 }
 </style>
