@@ -1,5 +1,5 @@
 <template>
-  <div class="layout-max home" id="library-grid">
+  <div class="layout-max home">
     <header class="page-head">
       <h1>总览</h1>
       <p class="stat-line">
@@ -8,6 +8,10 @@
     </header>
 
     <p v-if="loading" class="muted">加载中…</p>
+    <p v-else-if="loadError" class="empty-hint">
+      加载失败：{{ loadError }}
+      <button type="button" class="btn btn-ghost btn-sm" @click="load">重试</button>
+    </p>
 
     <template v-else>
       <!-- 临时分享：投放格 + 流动临时卡 -->
@@ -70,7 +74,7 @@
       </section>
 
       <!-- 所有库 -->
-      <section class="section">
+      <section id="library-grid" class="section">
         <div class="section-bar">
           <div class="sb-l"><h2>所有库</h2><span class="sb-count">{{ allItems.length }} 个</span></div>
           <div class="sb-actions">
@@ -174,6 +178,7 @@ const apps = ref([]);
 const libraries = ref([]);
 const tempItems = ref([]);
 const loading = ref(true);
+const loadError = ref('');
 const tempTick = ref(0);
 const dzDrag = ref(false);
 let tempListTimer = null;
@@ -259,19 +264,22 @@ async function loadTempList() {
   try {
     const t = await api('GET', '/api/temp-transfer/list');
     tempItems.value = t?.items || [];
-  } catch {
-    tempItems.value = [];
+  } catch (e) {
+    // 轮询失败保留上一份列表，别把「拉取失败」画成「没有临时文件」
+    if (e.status === 404) tempItems.value = []; // 服务端未启用临时文件
+    else if (e.status !== 401) toast(`临时文件列表刷新失败：${e.message}`, 'error');
   }
 }
 
 async function load() {
   loading.value = true;
+  loadError.value = '';
   try {
     const [a, r] = await Promise.all([api('GET', '/api/apps'), api('GET', '/api/resources')]);
     apps.value = a;
     libraries.value = r;
   } catch (e) {
-    toast(e.message, 'error');
+    loadError.value = e.message;
   } finally {
     loading.value = false;
   }
@@ -336,13 +344,14 @@ async function createLibrary() {
 }
 
 onMounted(async () => {
-  await load();
+  // 计时器先于 await 起：页面在加载中就被离开时，onUnmounted 才清得到
   tempTickTimer = setInterval(() => {
     tempTick.value += 1;
   }, 1000);
   tempListTimer = setInterval(() => {
     loadTempList();
   }, 40000);
+  await load();
   if (
     window.location.hash === '#section-resources' ||
     window.location.hash === '#library-grid' ||

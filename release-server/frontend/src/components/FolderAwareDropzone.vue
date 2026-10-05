@@ -3,65 +3,48 @@
     class="drop-zone"
     :class="{ drag: dragActive, disabled }"
     @dragover.prevent="!disabled && (dragActive = true)"
-    @dragleave="dragActive = false"
+    @dragleave="onDragLeave"
     @drop.prevent="onDrop"
-    @click="onClick"
+    @click="!disabled && fileInputRef.click()"
   >
-    <input
-      ref="fileInputRef"
-      type="file"
-      multiple
-      class="hidden-input"
-      :disabled="disabled"
-      @change="onInputChange"
-    />
+    <input ref="fileInputRef" type="file" multiple class="hidden-input" :disabled="disabled" @click.stop @change="onInputChange" />
+    <input ref="dirInputRef" type="file" webkitdirectory class="hidden-input" :disabled="disabled" @click.stop @change="onInputChange" />
     <span>{{ hint }}</span>
+    <button type="button" class="dir-link" :disabled="disabled" @click.stop="dirInputRef.click()">选文件夹</button>
   </div>
 </template>
 
 <script setup>
 import { ref } from 'vue';
-import {
-  ingestFromDataTransfer,
-  ingestFromFileList,
-  pickOnZoneClick,
-} from '@/composables/useFolderUpload';
+import { ingestFromDataTransfer, ingestFromFileList } from '@/composables/useFolderUpload';
 
 const props = defineProps({
   disabled: { type: Boolean, default: false },
-  hint: {
-    type: String,
-    default: '拖拽文件或文件夹到此处，或点击选择（自动识别目录结构）',
-  },
+  hint: { type: String, default: '拖文件或文件夹到此处，或点击选文件' },
 });
 
 const emit = defineEmits(['items']);
 
 const fileInputRef = ref(null);
+const dirInputRef = ref(null);
 const dragActive = ref(false);
 
-async function emitItems(list) {
-  if (list?.length) emit('items', list);
+/** 指针进入子元素也会触发 dragleave：只在真正离开整个区域时熄灭 */
+function onDragLeave(e) {
+  if (!e.currentTarget.contains(e.relatedTarget)) dragActive.value = false;
 }
 
 async function onDrop(e) {
   dragActive.value = false;
   if (props.disabled) return;
   const list = await ingestFromDataTransfer(e.dataTransfer);
-  await emitItems(list);
-}
-
-async function onClick() {
-  if (props.disabled) return;
-  const list = await pickOnZoneClick(fileInputRef.value);
-  await emitItems(list);
+  if (list.length) emit('items', list);
 }
 
 async function onInputChange(e) {
-  if (props.disabled) return;
   const list = await ingestFromFileList(e.target.files);
   e.target.value = '';
-  await emitItems(list);
+  if (list.length) emit('items', list);
 }
 </script>
 
@@ -87,6 +70,20 @@ async function onInputChange(e) {
   opacity: 0.5;
   cursor: not-allowed;
 }
+.dir-link {
+  display: block;
+  margin: 6px auto 0;
+  padding: 0;
+  border: 0;
+  background: none;
+  font: inherit;
+  font-size: 12px;
+  color: var(--text3);
+  text-decoration: underline dotted;
+  text-underline-offset: 3px;
+  cursor: pointer;
+}
+.dir-link:hover { color: var(--accent); }
 .hidden-input {
   position: absolute;
   width: 0;

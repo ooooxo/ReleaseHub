@@ -174,8 +174,8 @@
 
             <!-- 版本操作 -->
             <div class="vactions">
-              <button v-if="!v.isLatest" type="button" class="btn btn-primary btn-sm" @click="quickPublish(v.version)">设为最新发布</button>
-              <button v-else type="button" class="btn btn-ghost btn-sm" @click="republish(v.version)">重新发布</button>
+              <button v-if="!v.isLatest" type="button" class="btn btn-primary btn-sm" :disabled="publishing" @click="quickPublish(v.version)">设为最新发布</button>
+              <button v-else type="button" class="btn btn-ghost btn-sm" :disabled="publishing" @click="republish(v.version)">重新发布</button>
               <button v-if="publicBase" type="button" class="btn btn-ghost btn-sm" @click="copy(versionPageUrl(v.version))">复制版本页</button>
               <button type="button" class="btn btn-danger btn-sm" @click="confirmDeleteVersion(v.version)">删除此版本</button>
             </div>
@@ -324,6 +324,8 @@
 </template>
 
 <script setup>
+import { ingestFromDataTransfer } from '@/composables/useFolderUpload';
+import { copyText } from '@/utils/copy-text';
 import { ref, computed, watch } from 'vue';
 import { useRoute, useRouter } from 'vue-router';
 import { api, uploadWithProgress, uploadAppVersion } from '@/api/client';
@@ -607,6 +609,7 @@ async function loadAll() {
     await loadDrafts();
     await loadLatest();
   } catch (e) {
+    if (e.status === 401) return;
     toast(e.message, 'error');
     router.push('/');
   } finally {
@@ -616,7 +619,7 @@ async function loadAll() {
 
 async function copy(text) {
   try {
-    await navigator.clipboard.writeText(text);
+    await copyText(text);
     toast('已复制');
   } catch {
     toast('复制失败', 'error');
@@ -770,12 +773,15 @@ async function runPublish(ver, { allowMissingSig = false } = {}) {
   await loadDrafts();
 }
 
+const publishing = ref(false);
 function quickPublish(ver) {
-  runPublish(ver).catch(e => toast(e.message, 'error'));
+  if (publishing.value) return;
+  publishing.value = true;
+  runPublish(ver)
+    .catch(e => toast(e.message, 'error'))
+    .finally(() => { publishing.value = false; });
 }
-function republish(ver) {
-  runPublish(ver).catch(e => toast(e.message, 'error'));
-}
+const republish = quickPublish;
 
 async function deleteFile(ver, name) {
   try {
@@ -823,20 +829,27 @@ function confirmDeleteApp() {
 }
 
 async function onFileChange(ver, ev) {
-  const files = ev.target.files;
-  if (files?.length) await doUpload(ver, files);
+  const items = Array.from(ev.target.files || [], f => ({ file: f, relativePath: f.name }));
   ev.target.value = '';
+  await doUpload(ver, items);
 }
 
 async function onDrop(ev, ver) {
   dragVer.value = null;
-  const files = ev.dataTransfer?.files;
-  if (files?.length) await doUpload(ver, files);
+  const items = await ingestFromDataTransfer(ev.dataTransfer);
+  if (items.some(it => it.relativePath.includes('/'))) {
+    toast('版本只收平铺文件，不收文件夹', 'error');
+    return;
+  }
+  if (items.length) await doUpload(ver, items);
 }
 
-async function doUpload(ver, files) {
-  const items = Array.from(files, f => ({ file: f, relativePath: f.webkitRelativePath || f.name }));
+async function doUpload(ver, items) {
   if (!items.length) return;
+  if (uploadAborts.value[ver]) {
+    toast(`${ver} 正在上传，等它传完或先取消`, 'error');
+    return;
+  }
   const ctrl = new AbortController();
   uploadAborts.value = { ...uploadAborts.value, [ver]: ctrl };
   uploadProgress.value = { ...uploadProgress.value, [ver]: 0 };

@@ -7,6 +7,7 @@
 </template>
 
 <script setup>
+import { copyText } from '@/utils/copy-text';
 import { useToast } from '@/composables/useToast';
 
 const props = defineProps({
@@ -18,7 +19,7 @@ const { toast } = useToast();
 
 function onCopy() {
   if (!props.url) return;
-  navigator.clipboard.writeText(props.url).then(
+  copyText(props.url).then(
     () => toast('已复制'),
     () => toast('复制失败', 'error'),
   );

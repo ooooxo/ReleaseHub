@@ -1,11 +1,22 @@
 import { useAuthStore } from '@/stores/auth';
 import router from '@/router';
 
-function redirectToLoginIfNeeded() {
-  const r = router.currentRoute.value;
-  if (r.meta.requiresAuth) {
-    router.replace({ name: 'login', query: { redirect: r.fullPath } });
-  }
+/** 会话过期：记下当前页再登出，登录后回到原处。多个并发请求同时 401 只跳一次 */
+function handleUnauthorized() {
+  const auth = useAuthStore();
+  if (!auth.token) return;
+  auth.logout();
+  // 首屏请求可能早于初始导航落定（此时 currentRoute 还是起始空路由），等路由就绪再判断
+  router.isReady().then(() => {
+    const r = router.currentRoute.value;
+    if (r.meta.requiresAuth) router.replace({ name: 'login', query: { redirect: r.fullPath } });
+  });
+}
+
+function unauthorizedError() {
+  const e = new Error('登录已过期，请重新登录');
+  e.status = 401;
+  return e;
 }
 
 /** 与 Vite base 一致，保证子路径部署下 /api 经 Nginx 前缀转发 */
@@ -73,10 +84,9 @@ export async function api(method, path, body = null, options = {}) {
     signal: options.signal,
   });
 
-  if (res.status === 401) {
-    auth.logout();
-    redirectToLoginIfNeeded();
-    throw new Error('未授权');
+  if (res.status === 401 && headers.Authorization) {
+    handleUnauthorized();
+    throw unauthorizedError();
   }
 
   const text = await res.text();
@@ -116,7 +126,7 @@ export function uploadWithProgress({ method, path: p, formData, onProgress, sign
     if (signal) {
       const onAbort = () => {
         xhr.abort();
-        reject(new Error('已取消'));
+        reject(tusAbortError());
       };
       if (signal.aborted) {
         onAbort();
@@ -146,9 +156,8 @@ export function uploadWithProgress({ method, path: p, formData, onProgress, sign
         }
       }
       if (xhr.status === 401) {
-        auth.logout();
-        redirectToLoginIfNeeded();
-        reject(new Error('未授权'));
+        handleUnauthorized();
+        reject(unauthorizedError());
         return;
       }
       if (xhr.status >= 400) {
@@ -183,7 +192,7 @@ export function uploadWithProgress({ method, path: p, formData, onProgress, sign
     };
 
     xhr.onerror = () => reject(new Error('网络错误'));
-    xhr.onabort = () => reject(new Error('已取消'));
+    xhr.onabort = () => reject(tusAbortError());
 
     xhr.send(formData);
   });
@@ -287,12 +296,6 @@ function tusError(res, fallback) {
   return e;
 }
 
-function handleUnauthorized() {
-  const auth = useAuthStore();
-  auth.logout();
-  redirectToLoginIfNeeded();
-}
-
 /**
  * 单文件断点续传上传。完成后 resolve 服务端 onUploadFinish 返回的 JSON。
  * @param {{ surface:string, file:File, metadata?:object, onProgress?:(pct:number)=>void, signal?:AbortSignal }} opts
@@ -301,7 +304,7 @@ export async function uploadResumable({ surface, file, metadata = {}, onProgress
   const auth = useAuthStore();
   const authHeaders = () => (auth.token ? { Authorization: `Bearer ${auth.token}` } : {});
   const size = file.size;
-  const target = `${surface}:${metadata.app || metadata.name || metadata.batchId || ''}:${metadata.version || ''}:${metadata.relPath || metadata.filename || file.name}`;
+  const target = `${surface}:${metadata.app || metadata.name || metadata.batchId || ''}:${metadata.version || ''}:${metadata.ttlMinutes || ''}:${metadata.relPath || metadata.filename || file.name}`;
   const key = fingerprintKey(file, target);
   const headUrl = id => uploadXhrUrl(`${TUS_ENDPOINT}/${id}`);
   const pct = bytes => { if (onProgress) onProgress(Math.min(100, Math.round((bytes / (size || 1)) * 100))); };
@@ -332,7 +335,8 @@ export async function uploadResumable({ surface, file, metadata = {}, onProgress
       headers: { 'Tus-Resumable': '1.0.0', 'Upload-Length': String(size), 'Upload-Metadata': meta, ...authHeaders() },
       signal,
     });
-    if (create.status === 401) { handleUnauthorized(); throw tusError(create, '未授权'); }
+    if (create.status === 401) { handleUnauthorized(); throw unauthorizedError(); }
+    if (size === 0 && create.status === 200) return tusParseBody(create);
     if (create.status !== 201) throw tusError(create, '创建上传失败');
     id = (create.getHeader('Location') || '').split('/').filter(Boolean).pop();
     if (!id) throw new Error('服务器未返回上传地址');
@@ -341,18 +345,6 @@ export async function uploadResumable({ surface, file, metadata = {}, onProgress
   }
 
   pct(offset);
-
-  // 空文件：tus 在创建即完成，补一次 HEAD 取结果（onUploadFinish 的 body 不在 HEAD 上，故直接拉 meta 不可得）
-  if (size === 0 && offset === 0) {
-    const res = await tusXhr({
-      method: 'PATCH', url: headUrl(id),
-      headers: { 'Tus-Resumable': '1.0.0', 'Upload-Offset': '0', 'Content-Type': 'application/offset+octet-stream', ...authHeaders() },
-      body: new Blob([]), signal,
-    });
-    lsDel(key);
-    if (res.status >= 400) throw tusError(res, '上传失败');
-    return tusParseBody(res);
-  }
 
   let attempt = 0;
   while (offset < size) {
@@ -374,7 +366,7 @@ export async function uploadResumable({ surface, file, metadata = {}, onProgress
       offset = await tusResyncOffset(id, headUrl, authHeaders, offset, signal, key);
       continue;
     }
-    if (res.status === 401) { handleUnauthorized(); throw tusError(res, '未授权'); }
+    if (res.status === 401) { handleUnauthorized(); throw unauthorizedError(); }
     if (res.status === 404 || res.status === 410) { lsDel(key); throw tusError(res, '上传已过期，请重新上传'); }
     if (res.status >= 400) {
       if (++attempt > TUS_MAX_RETRIES) throw tusError(res, '上传失败');
@@ -406,20 +398,33 @@ async function tusResyncOffset(id, headUrl, authHeaders, current, signal, key) {
   return current;
 }
 
-/** 并发池：tasks 为返回 Promise 的函数数组 */
+/** 并发池：tasks 为 (signal) => Promise。任一失败即中止其余，全部停下后再抛第一个错 */
 async function tusPool(tasks, concurrency, signal) {
+  const ctrl = new AbortController();
+  const stop = () => ctrl.abort();
+  if (signal) {
+    if (signal.aborted) throw tusAbortError();
+    signal.addEventListener('abort', stop, { once: true });
+  }
   const results = new Array(tasks.length);
   let cursor = 0;
+  let firstError = null;
   async function worker() {
-    for (;;) {
-      if (signal && signal.aborted) throw tusAbortError();
+    while (!ctrl.signal.aborted && cursor < tasks.length) {
       const idx = cursor++;
-      if (idx >= tasks.length) return;
-      results[idx] = await tasks[idx]();
+      try {
+        results[idx] = await tasks[idx](ctrl.signal);
+      } catch (e) {
+        if (!firstError) firstError = e;
+        ctrl.abort();
+      }
     }
   }
   const n = Math.max(1, Math.min(concurrency, tasks.length));
   await Promise.all(Array.from({ length: n }, worker));
+  if (signal) signal.removeEventListener('abort', stop);
+  if (firstError) throw firstError;
+  if (ctrl.signal.aborted) throw tusAbortError();
   return results;
 }
 
@@ -440,10 +445,10 @@ function baseName(rel) {
 /** App 版本：N 文件并发续传，聚合进度，返回 { uploaded } */
 export async function uploadAppVersionResumable({ app, version, items, onProgress, signal, concurrency = 3 }) {
   const prog = aggregateProgress(items, onProgress);
-  const tasks = items.map((it, idx) => () => uploadResumable({
+  const tasks = items.map((it, idx) => sig => uploadResumable({
     surface: 'app', file: it.file,
     metadata: { app, version, filename: baseName(it.relativePath || it.file.name) },
-    onProgress: prog(idx), signal,
+    onProgress: prog(idx), signal: sig,
   }));
   const results = await tusPool(tasks, concurrency, signal);
   return { uploaded: results.flatMap(r => (r && r.uploaded) || []) };
@@ -452,10 +457,10 @@ export async function uploadAppVersionResumable({ app, version, items, onProgres
 /** 资源库：保留相对路径，N 文件并发续传，返回 { uploaded } */
 export async function uploadResourceResumable({ name, items, onProgress, signal, concurrency = 3 }) {
   const prog = aggregateProgress(items, onProgress);
-  const tasks = items.map((it, idx) => () => uploadResumable({
+  const tasks = items.map((it, idx) => sig => uploadResumable({
     surface: 'resource', file: it.file,
     metadata: { name, relPath: it.relativePath || it.file.name, filename: baseName(it.relativePath || it.file.name) },
-    onProgress: prog(idx), signal,
+    onProgress: prog(idx), signal: sig,
   }));
   const results = await tusPool(tasks, concurrency, signal);
   return { uploaded: results.flatMap(r => (r && r.uploaded) || []) };
@@ -473,17 +478,22 @@ export async function uploadTempResumable({ items, ttlMinutes, folderName, onPro
       onProgress: prog(0), signal,
     });
   }
-  const batchId = randomHex(16);
-  const tasks = items.map((it, idx) => () => uploadResumable({
+  // 同一文件夹 + 同 TTL 复用 batchId，否则每次换 id，各文件的续传指纹永远对不上
+  const batchKey = `tusbatch::${ttlMinutes}::${items.map(it => `${it.relativePath}|${it.file.size}|${it.file.lastModified}`).join('/')}`;
+  const batchId = lsGet(batchKey) || randomHex(16);
+  lsSet(batchKey, batchId);
+  const tasks = items.map((it, idx) => sig => uploadResumable({
     surface: 'temp', file: it.file,
     metadata: { kind: 'folder', batchId, relPath: it.relativePath || it.file.name, filename: baseName(it.relativePath || it.file.name), ttlMinutes },
-    onProgress: prog(idx), signal,
+    onProgress: prog(idx), signal: sig,
   }));
   await tusPool(tasks, concurrency, signal);
   const fallbackName = String(items[0].relativePath || '').split('/')[0] || '文件夹';
-  return api('POST', '/api/temp-transfer/commit', {
+  const rec = await api('POST', '/api/temp-transfer/commit', {
     batchId, folderName: folderName || fallbackName, ttlMinutes,
   });
+  lsDel(batchKey);
+  return rec;
 }
 
 /* ───────── 智能路由：按服务端开关在续传 / 旧整包上传间自动选择 ───────── */
@@ -491,12 +501,8 @@ export async function uploadTempResumable({ items, ttlMinutes, folderName, onPro
 let _resumableMode = null; // null=未知, true/false
 export async function ensureUploadMode() {
   if (_resumableMode !== null) return _resumableMode;
-  try {
-    const sys = await api('GET', '/api/system');
-    _resumableMode = sys && sys.uploadResumable === true;
-  } catch {
-    _resumableMode = false; // 取不到则回落旧路径（始终可用）
-  }
+  const sys = await api('GET', '/api/system');
+  _resumableMode = sys.uploadResumable === true;
   return _resumableMode;
 }
 

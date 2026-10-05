@@ -39,7 +39,7 @@
         :hint="
           uploading
             ? '正在上传…'
-            : '拖拽文件或文件夹到此处，或点击选择（自动识别目录结构；同名覆盖并保留元数据）'
+            : '拖文件或文件夹到此处，或点击选文件（同名覆盖并保留元数据）'
         "
         @items="onUploadItems"
       />
@@ -295,6 +295,7 @@
 </template>
 
 <script setup>
+import { copyText } from '@/utils/copy-text';
 import { ref, computed, watch, reactive } from 'vue';
 import { useRoute, useRouter } from 'vue-router';
 import { api, uploadResource } from '@/api/client';
@@ -488,7 +489,7 @@ function itemDirect(it) {
 
 function copy(text) {
   if (!text) return;
-  navigator.clipboard.writeText(text).then(
+  copyText(text).then(
     () => toast('已复制'),
     () => toast('复制失败', 'error'),
   );

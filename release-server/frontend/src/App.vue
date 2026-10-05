@@ -31,7 +31,8 @@ import ServerStatusStrip from '@/components/ServerStatusStrip.vue';
 const route = useRoute();
 const auth = useAuthStore();
 const showServerStrip = computed(() => !!auth.token && route.name !== 'login');
-const shelled = computed(() => !!auth.token && route.name !== 'login');
+// 只看路由不看 token：登出那一刻不能先把当前页重挂一遍（会再打一轮 401）
+const shelled = computed(() => !!route.meta.requiresAuth);
 </script>
 
 <style scoped>

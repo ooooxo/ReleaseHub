@@ -19,20 +19,6 @@ function fileRelativePath(file) {
   return normalizeRel(file.name) || file.name;
 }
 
-async function readDirectoryHandle(dirHandle, prefix = '') {
-  const out = [];
-  for await (const [name, handle] of dirHandle.entries()) {
-    const rel = prefix ? `${prefix}/${name}` : name;
-    if (handle.kind === 'file') {
-      const file = await handle.getFile();
-      out.push({ file, relativePath: normalizeRel(rel) || name });
-    } else if (handle.kind === 'directory') {
-      out.push(...(await readDirectoryHandle(handle, rel)));
-    }
-  }
-  return out;
-}
-
 async function readEntry(entry, prefix = '') {
   if (!entry) return [];
   if (entry.isFile) {
@@ -76,14 +62,15 @@ async function readEntry(entry, prefix = '') {
 
 export async function ingestFromDataTransfer(dt) {
   if (!dt) return [];
-  const items = dt.items ? [...dt.items] : [];
-  if (items.length && items[0]?.webkitGetAsEntry) {
+  // DataTransferItem 只在 drop 事件同步阶段有效：必须先把全部 entry 取出再 await
+  const entries = [...(dt.items || [])]
+    .filter(it => it.kind === 'file')
+    .map(it => it.webkitGetAsEntry?.())
+    .filter(Boolean);
+  if (entries.length) {
     const out = [];
-    for (const item of items) {
-      const entry = item.webkitGetAsEntry?.();
-      if (entry) out.push(...(await readEntry(entry)));
-    }
-    if (out.length) return out;
+    for (const entry of entries) out.push(...(await readEntry(entry, entry.name)));
+    return out;
   }
   const files = dt.files ? [...dt.files] : [];
   return files.map(file => ({ file, relativePath: fileRelativePath(file) }));
@@ -92,43 +79,6 @@ export async function ingestFromDataTransfer(dt) {
 export async function ingestFromFileList(fileList) {
   const files = fileList ? [...fileList] : [];
   return files.map(file => ({ file, relativePath: fileRelativePath(file) }));
-}
-
-export async function pickFilesWithInput(inputEl) {
-  return new Promise((resolve, reject) => {
-    if (!inputEl) {
-      resolve([]);
-      return;
-    }
-    const onChange = async () => {
-      inputEl.removeEventListener('change', onChange);
-      const list = await ingestFromFileList(inputEl.files);
-      inputEl.value = '';
-      resolve(list);
-    };
-    inputEl.addEventListener('change', onChange);
-    inputEl.click();
-  });
-}
-
-export async function pickDirectoryIfSupported() {
-  if (typeof window.showDirectoryPicker !== 'function') return [];
-  try {
-    const dir = await window.showDirectoryPicker();
-    return readDirectoryHandle(dir, dir.name || '');
-  } catch (e) {
-    if (e?.name === 'AbortError') return [];
-    throw e;
-  }
-}
-
-/** 点击上传区：先尝试目录选择器，否则多文件 input */
-export async function pickOnZoneClick(fileInputRef) {
-  if (typeof window.showDirectoryPicker === 'function') {
-    const fromDir = await pickDirectoryIfSupported();
-    if (fromDir.length) return fromDir;
-  }
-  return pickFilesWithInput(fileInputRef);
 }
 
 export function describeUploadBatch(items) {

@@ -33,7 +33,7 @@
           :hint="
             uploading
               ? '正在上传…'
-              : `拖拽文件 / 文件夹到此 · 点击选择 · 自动识别目录结构 · 单文件最大 ${maxFileSizeMb} MB`
+              : `拖文件 / 文件夹到此 · 点击选文件 · 单文件最大 ${maxFileSizeMb} MB`
           "
           @items="onUploadItems"
         />

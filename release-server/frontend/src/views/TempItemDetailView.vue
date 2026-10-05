@@ -111,6 +111,7 @@
 </template>
 
 <script setup>
+import { copyText } from '@/utils/copy-text';
 import { ref, computed, onMounted, onUnmounted, watch } from 'vue';
 import { useRoute, useRouter } from 'vue-router';
 import { api } from '@/api/client';
@@ -162,7 +163,7 @@ const entryList = computed(() => {
 function copyEntryLink(ent) {
   if (!item.value?.token || !publicBase.value) return;
   const url = `${publicBase.value}/tt/${encodeURIComponent(item.value.token)}/files/${encodePathForUrl(ent.relativePath)}`;
-  navigator.clipboard.writeText(url).then(
+  copyText(url).then(
     () => toast('已复制'),
     () => toast('复制失败', 'error'),
   );
@@ -267,9 +268,9 @@ async function confirmCancel() {
 }
 
 onMounted(async () => {
+  startTick();
   await loadBase();
   await load();
-  startTick();
 });
 
 onUnmounted(() => {
