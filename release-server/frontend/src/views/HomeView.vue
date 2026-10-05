@@ -85,11 +85,11 @@
                 v-if="it.landingUrl"
                 type="button"
                 class="tt-copy"
-                :class="{ 'is-copied done-pop': copiedId === it.id }"
+                :class="{ 'is-copied done-pop': copiedKey === it.id }"
                 v-tip="'复制分享链'"
-                @click.stop="copyLink(it)"
+                @click.stop="copy(it.landingUrl, it.id)"
               >
-                <svg v-if="copiedId === it.id" class="check-draw" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12.5l4.5 4.5L19 7.5" /></svg>
+                <svg v-if="copiedKey === it.id" class="check-draw" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12.5l4.5 4.5L19 7.5" /></svg>
                 <svg v-else viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><rect x="9" y="9" width="11" height="11" rx="2" /><path d="M5 15V5a2 2 0 0 1 2-2h10" /></svg>
               </button>
             </div>
@@ -194,7 +194,7 @@ import { useRouter } from 'vue-router';
 import { api, uploadTemp } from '@/api/client';
 import { useUploads } from '@/stores/uploads';
 import { describeUploadBatch } from '@/composables/useFolderUpload';
-import { copyText } from '@/utils/copy-text';
+import { useCopied } from '@/composables/useCopied';
 import FolderAwareDropzone from '@/components/FolderAwareDropzone.vue';
 import Layer from '@/components/ui/Layer.vue';
 import { useToast } from '@/composables/useToast';
@@ -299,18 +299,7 @@ watch(
 );
 
 /* 复制成功：字形原地换成描出来的勾，片刻后换回 */
-const copiedId = ref(null);
-let copiedTimer = null;
-function copyLink(it) {
-  copyText(it.landingUrl).then(
-    () => {
-      copiedId.value = it.id;
-      clearTimeout(copiedTimer);
-      copiedTimer = setTimeout(() => { copiedId.value = null; }, 1400);
-    },
-    () => toast('复制失败', 'error'),
-  );
-}
+const { copiedKey, copy } = useCopied();
 
 function tempSec(it) {
   void tempTick.value;

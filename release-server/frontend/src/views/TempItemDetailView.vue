@@ -84,7 +84,7 @@
       <div class="section-bar"><div class="sb-l"><h2>{{ item.kind === 'folder' ? '文件夹信息' : '文件信息' }}</h2></div></div>
       <div class="card block">
         <ul class="kv">
-          <li><span class="k">大小</span><span class="v mono">{{ fmtSize(item.size) }}</span></li>
+          <li><span class="k">大小</span><span class="v mono">{{ formatBytes(item.size) }}</span></li>
           <li><span class="k">类型</span><span class="v">{{ item.kind === 'folder' ? '文件夹' : '单文件' }}</span></li>
           <li v-if="item.kind === 'folder'">
             <span class="k">文件数</span><span class="v mono">{{ item.fileCount || (item.entries || []).length }}</span>
@@ -101,7 +101,7 @@
           <ul class="entry-list">
             <li v-for="ent in entryList" :key="ent.relativePath" class="entry-row">
               <span class="entry-path">{{ ent.relativePath }}</span>
-              <span class="entry-size mono">{{ fmtSize(ent.size) }}</span>
+              <span class="entry-size mono">{{ formatBytes(ent.size) }}</span>
               <button type="button" class="btn btn-ghost btn-sm" @click="copyEntryLink(ent)">复制直链</button>
             </li>
           </ul>
@@ -150,9 +150,6 @@ const expireLocal = computed(() => {
 
 let tickTimer = null;
 const nowTick = ref(Date.now());
-function fmtSize(n) {
-  return formatBytes(n);
-}
 
 const entryList = computed(() => {
   const ents = item.value?.entries;

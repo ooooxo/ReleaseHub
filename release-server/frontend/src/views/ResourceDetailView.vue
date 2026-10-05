@@ -156,15 +156,15 @@
               <span class="fc-name" :class="{ 'path-font': folderBrowse && hasNestedPaths }" v-tip="it.fileName">{{ itemCardTitle(it) }}</span>
               <span v-if="it.version" class="fc-ver">{{ it.version }}</span>
             </div>
-            <span class="fc-size">{{ fmtSize(it.size) }}</span>
+            <span class="fc-size">{{ formatBytes(it.size) }}</span>
           </div>
           <p v-if="it.description || itemCardSubtitle(it)" class="fc-desc">{{ it.description || itemCardSubtitle(it) }}</p>
           <div class="fc-foot">
-            <a class="btn btn-primary btn-sm" :href="itemDirect(it)" target="_blank" rel="noopener noreferrer" @click.stop>
+            <a class="btn btn-primary btn-sm" :href="it.downloadUrl" target="_blank" rel="noopener noreferrer" @click.stop>
               <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4M7 10l5 5 5-5M12 15V3" /></svg>
               下载
             </a>
-            <button type="button" class="btn btn-ghost btn-sm" @click.stop="copy(itemDirect(it))">复制直链</button>
+            <button type="button" class="btn btn-ghost btn-sm" @click.stop="copy(it.downloadUrl)">复制直链</button>
             <span class="fc-hint">
               {{ openId === it.id ? '收起' : '展开' }}
               <svg class="chev" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M6 9l6 6 6-6" /></svg>
@@ -186,14 +186,14 @@
               <div class="fc-col">
                 <h4>文件信息</h4>
                 <ul class="kv">
-                  <li><span class="k">大小</span><span class="v mono">{{ fmtSize(openItem.size) }}</span></li>
+                  <li><span class="k">大小</span><span class="v mono">{{ formatBytes(openItem.size) }}</span></li>
                   <li v-if="openItem.version"><span class="k">版本</span><span class="v mono">{{ openItem.version }}</span></li>
                   <li><span class="k">路径</span><span class="v mono">{{ openItem.fileName }}</span></li>
                 </ul>
                 <div class="fc-actions">
-                  <a class="btn btn-ghost btn-sm" :href="itemDirect(openItem)" target="_blank" rel="noopener noreferrer">下载</a>
-                  <button type="button" class="btn btn-ghost btn-sm" @click="copy(itemLanding(openItem))">复制说明页</button>
-                  <button type="button" class="btn btn-ghost btn-sm" @click="copy(itemDirect(openItem))">复制直链</button>
+                  <a class="btn btn-ghost btn-sm" :href="openItem.downloadUrl" target="_blank" rel="noopener noreferrer">下载</a>
+                  <button type="button" class="btn btn-ghost btn-sm" @click="copy(openItem.landingHref)">复制说明页</button>
+                  <button type="button" class="btn btn-ghost btn-sm" @click="copy(openItem.downloadUrl)">复制直链</button>
                   <button v-if="itemInSubfolder(openItem)" type="button" class="btn btn-ghost btn-sm" @click="copy(itemFolderZip(openItem))">复制所在文件夹 ZIP</button>
                 </div>
               </div>
@@ -278,6 +278,7 @@ import { describeUploadBatch } from '@/composables/useFolderUpload';
 import { listDirectoryLevel, breadcrumbSegments, encodePathForUrl } from '@/utils/file-tree';
 import { suggestedPublicBaseFromVite } from '@/utils/public-url';
 import { copyText } from '@/utils/copy-text';
+import { formatBytes } from '@/utils/format-bytes';
 
 const route = useRoute();
 const router = useRouter();
@@ -445,12 +446,6 @@ function itemFolderZip(it) {
   const q = dir ? `?path=${encodeURIComponent(dir)}` : '';
   return `${publicBase.value}/r/${encodeURIComponent(libraryName.value)}/archive${q}`;
 }
-function itemLanding(it) {
-  return it.landingHref;
-}
-function itemDirect(it) {
-  return it.downloadUrl;
-}
 
 function applyDetail(d) {
   meta.value = { displayName: d.displayName || '', description: d.description || '' };
@@ -479,11 +474,6 @@ async function refreshItems() {
   }
 }
 
-function fmtSize(b) {
-  if (b < 1024) return `${b} B`;
-  if (b < 1048576) return `${(b / 1024).toFixed(1)} KB`;
-  return `${(b / 1048576).toFixed(1)} MB`;
-}
 
 function copy(text) {
   if (!text) return;

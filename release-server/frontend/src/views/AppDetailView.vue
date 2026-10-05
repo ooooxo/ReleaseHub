@@ -189,7 +189,7 @@
                       <svg v-else viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4M7 10l5 5 5-5M12 15V3" /></svg>
                     </span>
                     <a class="fname" :href="fileLandingUrl(v.version, f.name)" target="_blank" rel="noopener">{{ f.name }}</a>
-                    <span class="fsize">{{ fmtSize(f.size) }}</span>
+                    <span class="fsize">{{ formatBytes(f.size) }}</span>
                     <TwoStepButton
                       label="×"
                       armed-label="再按删除"
@@ -332,6 +332,7 @@ import SaveBar from '@/components/ui/SaveBar.vue';
 import ConfirmButton from '@/components/ui/ConfirmButton.vue';
 import TwoStepButton from '@/components/ui/TwoStepButton.vue';
 import { copyText } from '@/utils/copy-text';
+import { formatBytes } from '@/utils/format-bytes';
 import { joinReleaseArtifactUrl, suggestedPublicBaseFromVite } from '@/utils/public-url';
 
 const route = useRoute();
@@ -450,11 +451,6 @@ function versionPageUrl(ver) {
 }
 function fileLandingUrl(ver, filename) {
   return `${publicBase.value}/d/${[appName.value, ver, filename].map(encodeURIComponent).join('/')}`;
-}
-function fmtSize(b) {
-  if (b < 1024) return `${b} B`;
-  if (b < 1048576) return `${(b / 1024).toFixed(1)} KB`;
-  return `${(b / 1048576).toFixed(1)} MB`;
 }
 function fmtDate(s) {
   const d = new Date(s);
@@ -895,15 +891,6 @@ watch(
   color: var(--accent);
   background: var(--accent-tint);
 }
-.draft-actions {
-  margin-top: 8px;
-}
-.prog-indet {
-  margin-top: 10px;
-  font-size: 0.74rem;
-  color: var(--text3);
-}
-
 /* 高级区分组 */
 .adv-group {
   display: flex;

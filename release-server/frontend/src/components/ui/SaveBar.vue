@@ -80,18 +80,13 @@ defineExpose({ nudge });
   background: var(--amber);
   vertical-align: 1px;
 }
-.savebar.is-nudged { animation: savebar-nudge var(--t-slow) var(--ease-out); }
+.savebar.is-nudged { animation: nudge var(--t-slow) var(--ease-out); }
 
 .savebar-enter-active,
 .savebar-leave-active { transition: opacity var(--t-med) var(--ease-out), transform var(--t-med) var(--ease-out); }
 .savebar-enter-from,
 .savebar-leave-to { opacity: 0; transform: translateY(var(--shift)); }
 
-@keyframes savebar-nudge {
-  20% { transform: translateX(-5px); }
-  45% { transform: translateX(4px); }
-  70% { transform: translateX(-2px); }
-}
 @media (prefers-reduced-motion: reduce) {
   .savebar.is-nudged { animation: none; border-color: var(--amber); }
 }

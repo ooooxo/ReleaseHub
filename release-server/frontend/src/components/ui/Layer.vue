@@ -113,7 +113,7 @@ onUnmounted(() => {
 .layer--up { top: auto; bottom: calc(100% + 8px); }
 .layer--up.layer--end { transform-origin: bottom right; }
 .layer--up.layer--start { transform-origin: bottom left; }
-.layer.is-nudged { animation: layer-nudge var(--t-slow) var(--ease-out); }
+.layer.is-nudged { animation: nudge var(--t-slow) var(--ease-out); }
 
 .layer-enter-active { transition: opacity var(--t-med) var(--ease-out), transform var(--t-med) var(--ease-out); }
 .layer-leave-active { transition: opacity var(--t-fast) var(--ease-out), transform var(--t-fast) var(--ease-out); }
@@ -123,11 +123,6 @@ onUnmounted(() => {
   transform: translateY(calc(var(--shift) * -0.5)) scale(var(--pop));
 }
 
-@keyframes layer-nudge {
-  20% { transform: translateX(-5px); }
-  45% { transform: translateX(4px); }
-  70% { transform: translateX(-2px); }
-}
 @media (prefers-reduced-motion: reduce) {
   .layer.is-nudged { animation: none; border-color: var(--amber); }
 }
