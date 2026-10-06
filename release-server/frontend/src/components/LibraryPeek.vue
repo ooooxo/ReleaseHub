@@ -206,8 +206,10 @@ watch(() => keyOf(props.target), () => fetchDetail(), { immediate: true });
 
 /* ---- 应用 ---- */
 const published = computed(() => detail.value?.published || null);
-const versions = computed(() => detail.value?.versions || []);
-const latestFiles = computed(() => (versions.value.find(v => v.isLatest)?.files || []).filter(f => !f.name.endsWith('.sig')));
+// 隐藏文件（.gitkeep 之类）与签名不是给人下载的，不列
+const shown = files => files.filter(f => !f.name.startsWith('.') && !f.name.endsWith('.sig'));
+const versions = computed(() => (detail.value?.versions || []).map(v => ({ ...v, files: shown(v.files) })));
+const latestFiles = computed(() => versions.value.find(v => v.isLatest)?.files || []);
 const fmtDate = ms => new Date(ms).toISOString().slice(0, 10);
 const pubDate = computed(() => (published.value?.pub_date ? fmtDate(published.value.pub_date) : ''));
 function versionDate(v) {
