@@ -11,7 +11,8 @@
         v-if="open"
         ref="panelRef"
         class="layer"
-        :class="[`layer--${align}`, { 'is-nudged': nudged, 'layer--up': up }]"
+        :class="{ 'is-nudged': nudged, 'layer--up': up }"
+        :style="{ left: `${x}px`, transformOrigin: `${originX}px ${up ? '100%' : '0'}` }"
         role="dialog"
         @keydown.esc.stop="tryClose"
       >
@@ -27,7 +28,7 @@ import { restartNudge } from '@/utils/restart-nudge';
 
 const props = defineProps({
   open: { type: Boolean, default: false },
-  align: { type: String, default: 'end' }, // end：右缘对齐触发钮；start：左缘
+  align: { type: String, default: 'end' }, // end：右缘对齐触发钮；start：左缘（放不下时往视口里挪）
   guard: { type: Boolean, default: false },
 });
 const emit = defineEmits(['update:open']);
@@ -36,6 +37,24 @@ const anchorRef = ref(null);
 const panelRef = ref(null);
 const nudged = ref(false);
 const up = ref(false);
+const x = ref(0); // 层左缘相对触发区左缘的偏移
+const originX = ref(0);
+const MARGIN = 8;
+
+/* 默认朝下；下方放不下且上方放得下才朝上。横向按 align 摆，出了视口就夹回来 */
+function place() {
+  const panel = panelRef.value;
+  const a = anchorRef.value?.getBoundingClientRect();
+  if (!panel || !a) return;
+  const w = panel.offsetWidth; // offset* 不受入场 scale 影响
+  const h = panel.offsetHeight;
+  const vw = document.documentElement.clientWidth;
+  const want = props.align === 'end' ? a.right - w : a.left;
+  const left = Math.max(MARGIN, Math.min(want, vw - w - MARGIN));
+  x.value = left - a.left;
+  originX.value = a.left + a.width / 2 - left;
+  up.value = a.bottom + 8 + h > window.innerHeight - MARGIN && a.top - 8 - h >= MARGIN;
+}
 
 function toggle() {
   if (props.open) tryClose();
@@ -68,16 +87,14 @@ watch(
       nudged.value = false;
       document.addEventListener('pointerdown', onPointerDown, true);
       document.addEventListener('keydown', onKeydown);
-      up.value = false;
+      window.addEventListener('resize', place);
       await nextTick();
-      /* 下方放不下、上方放得下就朝上长 */
-      const r = panelRef.value?.getBoundingClientRect();
-      const a = anchorRef.value?.getBoundingClientRect();
-      if (r && a && r.bottom > window.innerHeight - 8 && a.top - r.height - 16 > 0) up.value = true;
+      place();
       panelRef.value?.querySelector('[autofocus], input, textarea, button')?.focus();
     } else {
       document.removeEventListener('pointerdown', onPointerDown, true);
       document.removeEventListener('keydown', onKeydown);
+      window.removeEventListener('resize', place);
       if (anchorRef.value?.contains(document.activeElement) || document.activeElement === document.body) {
         anchorRef.value?.querySelector('button')?.focus();
       }
@@ -87,6 +104,7 @@ watch(
 onUnmounted(() => {
   document.removeEventListener('pointerdown', onPointerDown, true);
   document.removeEventListener('keydown', onKeydown);
+  window.removeEventListener('resize', place);
 });
 </script>
 
@@ -108,11 +126,7 @@ onUnmounted(() => {
   box-shadow: 0 18px 48px rgba(0, 0, 0, 0.5), 0 2px 8px rgba(0, 0, 0, 0.3);
   text-align: left;
 }
-.layer--end { right: 0; transform-origin: top right; }
-.layer--start { left: 0; transform-origin: top left; }
 .layer--up { top: auto; bottom: calc(100% + 8px); }
-.layer--up.layer--end { transform-origin: bottom right; }
-.layer--up.layer--start { transform-origin: bottom left; }
 .layer.is-nudged { animation: nudge var(--t-slow) var(--ease-out); }
 
 .layer-enter-active { transition: opacity var(--t-med) var(--ease-out), transform var(--t-med) var(--ease-out); }
