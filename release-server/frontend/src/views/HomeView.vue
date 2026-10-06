@@ -1,182 +1,136 @@
 <template>
-  <div class="layout-max home">
-    <header class="page-head">
-      <h1>总览</h1>
-      <p class="stat-line">
-        <b>{{ apps.length }}</b> 应用<span class="dot">·</span><b>{{ libraries.length }}</b> 资源库<span class="dot">·</span><b>{{ tempItems.length }}</b> 临时文件
-      </p>
-    </header>
+  <div class="home">
+    <!-- 背景液体：与入口页同一个库，随选中的库流动，压暗当底 -->
+    <div class="bg" aria-hidden="true"><canvas ref="bgCanvas" /></div>
 
-    <p v-if="loading" class="muted">加载中…</p>
-    <p v-else-if="loadError" class="empty-hint">
+    <Teleport defer to="#topbar-actions">
+      <Layer v-model:open="showCreate" :guard="createDirty">
+        <template #trigger="{ toggle }">
+          <button type="button" class="btn btn-ghost btn-sm" :aria-expanded="showCreate" @click="toggle">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><path d="M12 5v14M5 12h14" /></svg>
+            新建
+          </button>
+        </template>
+        <div v-if="!createMode" class="pick">
+          <button type="button" class="opt" @click="createMode = 'app'">
+            <span class="opt-k k-app" />
+            <span class="opt-t"><b>应用</b><small>有版本线：按版本发布安装包，客户端可自动更新</small></span>
+          </button>
+          <button type="button" class="opt" @click="createMode = 'resource'">
+            <span class="opt-k k-res" />
+            <span class="opt-t"><b>资源库</b><small>无版本线：放多个独立文件，可分目录、打包 ZIP</small></span>
+          </button>
+        </div>
+        <form v-else-if="createMode === 'app'" class="lform" @submit.prevent="createApp">
+          <p class="l-title">新建应用</p>
+          <label class="lbl">包名（目录与 URL，仅字母数字、_ -）</label>
+          <input v-model="newAppName" class="input" placeholder="my-app" autofocus />
+          <label class="lbl">软件名（可选，用于展示）</label>
+          <input v-model="newAppDisplayName" class="input" placeholder="例如：闪电助手" />
+          <label class="lbl">类型</label>
+          <div class="seg" role="radiogroup" aria-label="类型">
+            <button type="button" role="radio" :aria-checked="newAppRepoType === 'general'" :class="{ on: newAppRepoType === 'general' }" @click="newAppRepoType = 'general'">通用</button>
+            <button type="button" role="radio" :aria-checked="newAppRepoType === 'tauri'" :class="{ on: newAppRepoType === 'tauri' }" @click="newAppRepoType = 'tauri'">Tauri</button>
+          </div>
+          <div class="row">
+            <button type="button" class="btn btn-ghost btn-sm" @click="resetAppForm">取消</button>
+            <button type="submit" class="btn btn-primary btn-sm" :disabled="creatingApp">创建</button>
+          </div>
+        </form>
+        <form v-else class="lform" @submit.prevent="createLibrary">
+          <p class="l-title">新建资源库</p>
+          <label class="lbl">资源库标识（目录与 URL，仅字母数字、_ -）</label>
+          <input v-model="newResName" class="input" placeholder="my-resources" autofocus />
+          <label class="lbl">展示名（可选）</label>
+          <input v-model="newResDisplayName" class="input" placeholder="例如：常用工具合集" />
+          <label class="lbl">资源库简介（可选）</label>
+          <textarea v-model="newResDescription" class="textarea" rows="3" placeholder="对外下载页顶部说明" />
+          <div class="row">
+            <button type="button" class="btn btn-ghost btn-sm" @click="resetResForm">取消</button>
+            <button type="submit" class="btn btn-primary btn-sm" :disabled="creatingRes">创建</button>
+          </div>
+        </form>
+      </Layer>
+    </Teleport>
+
+    <p v-if="loading" class="state">加载中…</p>
+    <p v-else-if="loadError" class="state err">
       加载失败：{{ loadError }}
       <button type="button" class="btn btn-ghost btn-sm" @click="load">重试</button>
     </p>
 
-    <template v-else>
-      <!-- 临时文件：投放格 + 流动临时卡 -->
-      <section id="temp-hub" class="section">
-        <div class="section-bar">
-          <div class="sb-l"><h2>临时文件</h2><span class="sb-count">到期自删</span></div>
-        </div>
-        <div class="bento">
-          <div class="temp-cell">
-            <p v-if="tempDisabled" class="temp-off">本服务器未启用临时文件（TEMP_TRANSFER_ENABLED）</p>
-            <template v-else>
-              <FolderAwareDropzone class="dropzone" @items="onTempItems">
-                <svg class="dz-ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round">
-                  <path d="M12 16V4M7 9l5-5 5 5" />
-                  <path d="M5 16v3a1 1 0 0 0 1 1h12a1 1 0 0 0 1-1v-3" />
-                </svg>
-                <span class="dz-strong">拖文件 / 文件夹到此</span>
-                或点击选文件 · 传完就地出分享链
-              </FolderAwareDropzone>
-              <div class="ttl-row" role="radiogroup" aria-label="有效期">
-                <button
-                  v-for="m in allowedTtls"
-                  :key="m"
-                  type="button"
-                  role="radio"
-                  class="ttl"
-                  :class="{ on: ttlMinutes === m }"
-                  :aria-checked="ttlMinutes === m"
-                  @click="ttlMinutes = m"
-                  v-tip="formatTtl(m)"
-                >{{ shortTtl(m) }}</button>
-              </div>
+    <div v-else class="wrap">
+      <nav class="idx" aria-label="临时文件与所有库">
+        <!-- 临时文件：名单顶上一条——投放入口 + 有效期 + 每个临时文件一枚（剩余时间环） -->
+        <div v-if="!tempDisabled" id="temp-hub" class="tstrip">
+          <FolderAwareDropzone class="tdz" @items="onTempItems">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M12 16V4M7 9l5-5 5 5" /><path d="M5 16v3a1 1 0 0 0 1 1h12a1 1 0 0 0 1-1v-3" /></svg>
+            <span><span class="drag-only">拖文件到这里 · </span>选文件</span>
+          </FolderAwareDropzone>
+          <Layer v-model:open="showTtl" align="start">
+            <template #trigger="{ toggle }">
+              <button type="button" class="tttl" :aria-expanded="showTtl" v-tip="'临时文件的有效期'" @click="toggle">{{ formatTtl(ttlMinutes) }}后删</button>
             </template>
-          </div>
-
-          <div
+            <div class="ttl-pick" role="radiogroup" aria-label="有效期">
+              <button
+                v-for="m in allowedTtls"
+                :key="m"
+                type="button"
+                role="radio"
+                :aria-checked="ttlMinutes === m"
+                :class="{ on: ttlMinutes === m }"
+                @click="ttlMinutes = m; showTtl = false"
+              >{{ formatTtl(m) }}</button>
+            </div>
+          </Layer>
+          <button
             v-for="it in tempItems"
             :key="it.id"
-            class="temp-tile"
-            :class="{ 'is-fresh': it.id === freshId }"
-            role="button"
-            tabindex="0"
-            @click="goTemp(it)"
-            @keydown.enter.self.prevent="goTemp(it)"
+            type="button"
+            class="tc"
+            :class="{ on: selKey === `temp:${it.id}`, 'is-fresh': it.id === freshId }"
+            @mouseenter="hoverPick(`temp:${it.id}`)"
+            @mouseleave="hoverCancel"
+            @focus="pick(`temp:${it.id}`)"
+            @click="activate(`temp:${it.id}`)"
           >
-            <div class="tt-head">
-              <div class="ring" :class="{ warn: tempWarn(it) }">
-                <svg width="46" height="46" viewBox="0 0 46 46">
-                  <circle class="ring-track" cx="23" cy="23" r="19.5" />
-                  <circle
-                    class="ring-arc"
-                    cx="23"
-                    cy="23"
-                    r="19.5"
-                    stroke-dasharray="122.5"
-                    :stroke-dashoffset="ringOffset(it)"
-                    transform="rotate(-90 23 23)"
-                  />
-                </svg>
-                <span class="rtxt">{{ tempRingText(it) }}</span>
-              </div>
-              <div class="tt-body">
-                <span class="tt-name" v-tip="it.originalName || '未命名'">{{ it.originalName || '未命名' }}</span>
-                <span class="tt-meta">{{ tempMeta(it) }}</span>
-              </div>
-            </div>
-            <div class="tt-foot">
-              <span class="mini-tag" :class="{ folder: it.kind === 'folder' }">{{ it.kind === 'folder' ? '文件夹' : '单文件' }}</span>
-              <span class="tt-rem">{{ remLabel(it) }}</span>
-              <button
-                v-if="it.landingUrl"
-                type="button"
-                class="tt-copy"
-                :class="{ 'is-copied done-pop': copiedKey === it.id }"
-                v-tip="'复制分享链'"
-                @click.stop="copy(it.landingUrl, it.id)"
-              >
-                <svg v-if="copiedKey === it.id" class="check-draw" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12.5l4.5 4.5L19 7.5" /></svg>
-                <svg v-else viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><rect x="9" y="9" width="11" height="11" rx="2" /><path d="M5 15V5a2 2 0 0 1 2-2h10" /></svg>
-              </button>
-            </div>
-          </div>
+            <i class="ring" :class="{ warn: tempWarn(it) }" :style="{ '--p': `${ringPct(it)}%` }" />
+            <span class="tn">{{ it.originalName || '未命名' }}</span>
+            <small :class="{ warn: tempWarn(it) }">{{ remShort(it) }}</small>
+          </button>
         </div>
-      </section>
+        <p v-else class="temp-off">本服务器未启用临时文件（TEMP_TRANSFER_ENABLED）</p>
 
-      <!-- 所有库 -->
-      <section id="library-grid" class="section">
-        <div class="section-bar">
-          <div class="sb-l"><h2>所有库</h2><span class="sb-count">{{ allItems.length }} 个</span></div>
-          <div class="sb-actions">
-            <Layer v-model:open="showCreateApp" :guard="appFormDirty">
-              <template #trigger="{ toggle }">
-                <button type="button" class="btn btn-ghost btn-sm" :aria-expanded="showCreateApp" @click="toggle">新建应用</button>
-              </template>
-              <form class="lform" @submit.prevent="createApp">
-                <p class="l-title">新建应用</p>
-                <label class="lbl">包名（目录与 URL，仅字母数字、_ -）</label>
-                <input v-model="newAppName" class="input" placeholder="my-app" autofocus />
-                <label class="lbl">软件名（可选，用于展示）</label>
-                <input v-model="newAppDisplayName" class="input" placeholder="例如：闪电助手" />
-                <label class="lbl">类型</label>
-                <div class="seg" role="radiogroup" aria-label="类型">
-                  <button type="button" role="radio" :aria-checked="newAppRepoType === 'general'" :class="{ on: newAppRepoType === 'general' }" @click="newAppRepoType = 'general'">通用</button>
-                  <button type="button" role="radio" :aria-checked="newAppRepoType === 'tauri'" :class="{ on: newAppRepoType === 'tauri' }" @click="newAppRepoType = 'tauri'">Tauri</button>
-                </div>
-                <div class="row">
-                  <button type="button" class="btn btn-ghost btn-sm" @click="resetAppForm">取消</button>
-                  <button type="submit" class="btn btn-primary btn-sm" :disabled="creatingApp">创建</button>
-                </div>
-              </form>
-            </Layer>
-            <Layer v-model:open="showCreateResource" :guard="resFormDirty">
-              <template #trigger="{ toggle }">
-                <button type="button" class="btn btn-primary btn-sm" :aria-expanded="showCreateResource" @click="toggle">新建资源库</button>
-              </template>
-              <form class="lform" @submit.prevent="createLibrary">
-                <p class="l-title">新建资源库</p>
-                <label class="lbl">资源库标识（目录与 URL，仅字母数字、_ -）</label>
-                <input v-model="newResName" class="input" placeholder="my-resources" autofocus />
-                <label class="lbl">展示名（可选）</label>
-                <input v-model="newResDisplayName" class="input" placeholder="例如：常用工具合集" />
-                <label class="lbl">资源库简介（可选）</label>
-                <textarea v-model="newResDescription" class="textarea" rows="3" placeholder="对外下载页顶部说明" />
-                <div class="row">
-                  <button type="button" class="btn btn-ghost btn-sm" @click="resetResForm">取消</button>
-                  <button type="submit" class="btn btn-primary btn-sm" :disabled="creatingRes">创建</button>
-                </div>
-              </form>
-            </Layer>
-          </div>
-        </div>
-
-        <p v-if="!allItems.length" class="empty-hint">暂无库。可新建「应用」（多版本发版）或「资源库」（多文件无版本线）</p>
-
-        <TransitionGroup v-else name="slide-up" tag="div" class="bento">
+        <template v-for="g in groups" :key="g.label">
+          <div class="grp">{{ g.label }}</div>
           <button
-            v-for="(it, i) in allItems"
+            v-for="it in g.items"
             :key="it.key"
             type="button"
-            class="tile"
-            @click="goItem(it)"
+            class="it"
+            :class="{ on: selKey === it.key }"
+            @mouseenter="hoverPick(it.key)"
+            @mouseleave="hoverCancel"
+            @focus="pick(it.key)"
+            @click="activate(it.key)"
           >
-            <span class="cover"><img v-if="covers[i]" :src="covers[i]" alt="" /></span>
-            <div class="t-head">
-              <div class="t-titles">
-                <span class="t-name">{{ it.displayLabel || it.name }}</span>
-                <span v-if="it.displayName" class="t-pkg">{{ it.name }}</span>
-              </div>
-              <span class="t-count">{{ it.kind === 'app' ? `${it.versionCount} 版本` : `${it.itemCount} 文件` }}</span>
-            </div>
-            <div class="t-foot">
-              <div class="ver-block" :class="{ none: !(it.kind === 'app' && it.latestVersion) }">
-                <span class="ver-label">{{ it.kind === 'app' ? '最新' : '类型' }}</span>
-                <span class="ver-val">{{ it.kind === 'app' ? it.latestVersion || '尚未发布' : '无版本线' }}</span>
-              </div>
-              <span
-                class="chip"
-                :class="it.kind === 'app' ? (it.repoType === 'tauri' ? 'tauri' : 'general') : 'resource'"
-              >{{ it.kind === 'app' ? (it.repoType === 'tauri' ? 'Tauri' : '通用') : '资源库' }}</span>
-            </div>
+            <b>{{ it.displayLabel || it.name }}</b>
+            <span class="num">{{ it.kind === 'app' ? it.latestVersion || '尚未发布' : `${it.itemCount} 个文件` }}</span>
           </button>
-        </TransitionGroup>
-      </section>
-    </template>
+        </template>
+        <p v-if="!allItems.length" class="empty">还没有库。右上角「新建」一个应用或资源库。</p>
+      </nav>
 
+      <aside class="pane">
+        <LibraryPeek
+          v-if="selTarget"
+          :target="selTarget"
+          :public-base="publicBase"
+          :remaining="selTarget.kind === 'temp' ? remShort(selTarget.item) : ''"
+          :warn="selTarget.kind === 'temp' && tempWarn(selTarget.item)"
+        />
+      </aside>
+    </div>
   </div>
 </template>
 
@@ -186,12 +140,12 @@ import { useRouter } from 'vue-router';
 import { api, uploadTemp } from '@/api/client';
 import { useUploads } from '@/stores/uploads';
 import { describeUploadBatch } from '@/composables/useFolderUpload';
-import { useCopied } from '@/composables/useCopied';
 import FolderAwareDropzone from '@/components/FolderAwareDropzone.vue';
 import Layer from '@/components/ui/Layer.vue';
 import { useToast } from '@/composables/useToast';
-import { formatRemainingSec } from '@/utils/format-remaining';
-import { liquidCovers, liquidEntry } from '@/composables/useLiquid';
+import { liquidEntry, mountLiquidBackground } from '@/composables/useLiquid';
+import { usePublicBase } from '@/composables/usePublicBase';
+import LibraryPeek from '@/components/LibraryPeek.vue';
 
 const router = useRouter();
 const { toast } = useToast();
@@ -209,8 +163,14 @@ const tempDisabled = ref(false);
 const freshId = ref(null);
 let tempListTimer = null;
 let tempTickTimer = null;
-const showCreateApp = ref(false);
-const showCreateResource = ref(false);
+const showCreate = ref(false);
+/** 「新建」浮层里选的是哪一种；null = 还在选 */
+const createMode = ref(null);
+watch(showCreate, v => {
+  if (!v) createMode.value = null;
+});
+const showTtl = ref(false);
+const { publicBase, loadPublicBase } = usePublicBase();
 const newAppName = ref('');
 const newAppDisplayName = ref('');
 const newAppRepoType = ref('general');
@@ -225,8 +185,54 @@ const allItems = computed(() => {
   const r = libraries.value.map(x => ({ kind: 'resource', key: `res:${x.name}`, ...x }));
   return [...a, ...r];
 });
-// 每个库一张液体封面，与入口页同一个库、同名同形
-const covers = computed(() => liquidCovers(allItems.value.map(liquidEntry)));
+const groups = computed(() =>
+  [
+    { label: '应用', items: allItems.value.filter(x => x.kind === 'app') },
+    { label: '资源库', items: allItems.value.filter(x => x.kind === 'resource') },
+  ].filter(g => g.items.length),
+);
+
+/* ---- 选中：指上去（稍停一下）或聚焦就换右侧内容；手机没有右侧，点了直接进详情 ---- */
+const HOVER_MS = 70;
+const mobile = matchMedia('(max-width: 760px)');
+const selKey = ref('');
+const selTarget = computed(() => {
+  const k = selKey.value;
+  if (k.startsWith('temp:')) {
+    const it = tempItems.value.find(x => `temp:${x.id}` === k);
+    if (it) return { kind: 'temp', item: it };
+  }
+  const lib = allItems.value.find(x => x.key === k) || allItems.value[0];
+  return lib ? { kind: lib.kind, item: lib } : null;
+});
+function pick(key) {
+  selKey.value = key;
+}
+let hoverT = null;
+function hoverPick(key) {
+  clearTimeout(hoverT);
+  hoverT = setTimeout(() => pick(key), HOVER_MS);
+}
+function hoverCancel() {
+  clearTimeout(hoverT);
+}
+function activate(key) {
+  if (!mobile.matches) return pick(key);
+  if (key.startsWith('temp:')) router.push(`/temp-transfer/${encodeURIComponent(key.slice(5))}`);
+  else goItem(allItems.value.find(x => x.key === key));
+}
+
+/* ---- 背景液体：选中的库变了就流过去；选中临时文件时保持上一幅 ---- */
+const bgCanvas = ref(null);
+let bg = null;
+const NEUTRAL_LIQUID = { name: 'Release Hub', description: '', url: '', motif: 'flow' };
+watch(
+  () => (selTarget.value?.kind === 'temp' ? null : selTarget.value?.item.key),
+  key => {
+    if (!bg || !key) return;
+    bg.flowTo(liquidEntry(selTarget.value.item));
+  },
+);
 
 function goItem(it) {
   if (it.kind === 'app') {
@@ -236,10 +242,6 @@ function goItem(it) {
   }
 }
 
-function goTemp(it) {
-  router.push(`/temp-transfer/${encodeURIComponent(it.id)}`);
-}
-
 function formatTtl(m) {
   if (m < 60) return `${m} 分钟`;
   if (m % 1440 === 0) return `${m / 1440} 天`;
@@ -247,11 +249,6 @@ function formatTtl(m) {
   return `${m} 分钟`;
 }
 
-function shortTtl(m) {
-  if (m % 1440 === 0) return `${m / 1440}d`;
-  if (m % 60 === 0) return `${m / 60}h`;
-  return `${m}m`;
-}
 
 async function loadTtls() {
   try {
@@ -290,11 +287,10 @@ watch(
     const done = [...uploads.tasks].reverse().find(t => t.group === 'temp' && t.status === 'done');
     freshId.value = done?.result?.id ?? null;
     await loadTempList();
+    if (freshId.value) pick(`temp:${freshId.value}`);   // 刚传完的那个直接摆到右侧，分享链一键复制
   },
 );
 
-/* 复制成功：字形原地换成描出来的勾，片刻后换回 */
-const { copiedKey, copy } = useCopied();
 
 function tempSec(it) {
   void tempTick.value;
@@ -307,31 +303,17 @@ function tempWarn(it) {
   return tempSec(it) < 3600;
 }
 
-const RING_C = 122.5;
-function ringOffset(it) {
-  const frac = Math.max(0, Math.min(1, tempSec(it) / 86400));
-  return (RING_C * (1 - frac)).toFixed(1);
+/** 剩余时间环：按一天满格（与原来的大环同一把尺） */
+function ringPct(it) {
+  return Math.round(Math.max(0, Math.min(1, tempSec(it) / 86400)) * 100);
 }
-
-function tempRingText(it) {
+/** 胶囊里的短文案：剩 2 小时 / 剩 4 分钟 */
+function remShort(it) {
   const s = tempSec(it);
-  const h = Math.floor(s / 3600);
-  const m = Math.floor((s % 3600) / 60);
-  if (h >= 1) return `${h}h`;
-  if (m >= 1) return `${m}m`;
-  return `${s}s`;
-}
-
-function tempMeta(it) {
-  return it.kind === 'folder' ? `文件夹 · ${it.fileCount || 0} 文件` : '单文件';
-}
-
-function remLabel(it) {
-  void tempTick.value;
-  const exp = it.expireAt ? new Date(it.expireAt).getTime() : 0;
-  const sec = Math.max(0, Math.floor((exp - Date.now()) / 1000));
-  if (!exp) return formatRemainingSec(it.secondsRemaining || 0);
-  return `剩余 ${formatRemainingSec(sec)}`;
+  if (s >= 86400) return `剩 ${Math.floor(s / 86400)} 天`;
+  if (s >= 3600) return `剩 ${Math.floor(s / 3600)} 小时`;
+  if (s >= 60) return `剩 ${Math.floor(s / 60)} 分钟`;
+  return s > 0 ? `剩 ${s} 秒` : '已过期';
 }
 
 async function loadTempList() {
@@ -363,17 +345,18 @@ async function load() {
 /* 浮层里填了东西就算未存改动：点外面不收，免得一下手滑丢掉 */
 const appFormDirty = computed(() => !!(newAppName.value.trim() || newAppDisplayName.value.trim()));
 const resFormDirty = computed(() => !!(newResName.value.trim() || newResDisplayName.value.trim() || newResDescription.value.trim()));
+const createDirty = computed(() => (createMode.value === 'app' ? appFormDirty.value : createMode.value === 'resource' ? resFormDirty.value : false));
 function resetAppForm() {
   newAppName.value = '';
   newAppDisplayName.value = '';
   newAppRepoType.value = 'general';
-  showCreateApp.value = false;
+  showCreate.value = false;
 }
 function resetResForm() {
   newResName.value = '';
   newResDisplayName.value = '';
   newResDescription.value = '';
-  showCreateResource.value = false;
+  showCreate.value = false;
 }
 
 async function createApp() {
@@ -437,453 +420,396 @@ onMounted(async () => {
     loadTempList();
   }, 40000);
   loadTtls();
+  loadPublicBase();
   await load();
-  if (
-    window.location.hash === '#section-resources' ||
-    window.location.hash === '#library-grid' ||
-    window.location.hash === '#temp-hub'
-  ) {
-    const id = window.location.hash === '#temp-hub' ? 'temp-hub' : 'library-grid';
-    requestAnimationFrame(() => {
-      document.getElementById(id)?.scrollIntoView({ behavior: 'smooth', block: 'start' });
-    });
-  }
+  if (!selKey.value && allItems.value.length) pick(allItems.value[0].key);
+  bg = mountLiquidBackground(bgCanvas.value, selTarget.value && selTarget.value.kind !== 'temp' ? liquidEntry(selTarget.value.item) : NEUTRAL_LIQUID);
 });
 
 onUnmounted(() => {
   if (tempListTimer) clearInterval(tempListTimer);
   if (tempTickTimer) clearInterval(tempTickTimer);
+  clearTimeout(hoverT);
+  bg?.stop();
 });
 </script>
 
 <style scoped>
 .home {
-  padding-bottom: 40px;
-}
-.page-head {
-  display: flex;
-  align-items: baseline;
-  justify-content: space-between;
-  gap: 16px;
-  flex-wrap: wrap;
-  margin-bottom: 6px;
-}
-h1 {
-  margin: 0;
-  font-size: 1.9rem;
-  font-weight: 750;
-  letter-spacing: -0.02em;
-}
-.stat-line {
-  margin: 0;
-  font-size: 0.86rem;
-  color: var(--text2);
-}
-.stat-line b {
-  color: var(--text);
-  font-weight: 650;
-}
-.stat-line .dot {
-  margin: 0 8px;
-  color: var(--text3);
-}
-.muted {
-  color: var(--text2);
-}
-
-/* 分区 */
-.section {
-  margin-top: 4px;
-}
-.section-bar {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 12px;
-  margin: 26px 0 13px;
-}
-.sb-l {
-  display: flex;
-  align-items: baseline;
-  gap: 10px;
-}
-.section-bar h2 {
-  margin: 0;
-  font-size: 1.15rem;
-  font-weight: 700;
-  letter-spacing: -0.01em;
-}
-.sb-count {
-  font-size: 0.76rem;
-  color: var(--text3);
-  font-family: var(--font-mono);
-}
-.sb-actions {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 8px;
-}
-.empty-hint {
-  margin: 0 0 12px;
-  font-size: 0.9rem;
-  color: var(--text3);
-}
-
-/* 流动 bento：等高卡，数量多自然换行 */
-.bento {
-  display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(245px, 1fr));
-  gap: 13px;
-  align-content: start;
-}
-
-/* 库卡 */
-.tile {
   position: relative;
-  background: var(--surface);
-  border: 1px solid var(--border);
-  border-radius: var(--radius);
-  padding: 0 16px 16px;
-  overflow: hidden;
-  display: flex;
-  flex-direction: column;
-  text-align: left;
-  color: inherit;
-  font: inherit;
-  cursor: pointer;
-  transition: box-shadow var(--t-fast) var(--ease-out), border-color var(--t-fast) var(--ease-out), transform var(--t-fast) var(--ease-out);
-  min-height: 148px;
 }
-.tile:hover {
-  border-color: var(--border-strong);
-  box-shadow: 0 8px 28px rgba(0, 0, 0, 0.4);
+/* 背景液体：整页一幅，压暗到三成；左侧再压一道，让大字名单读得清 */
+.bg {
+  position: fixed;
+  inset: 0;
+  z-index: 0;
+  pointer-events: none;
 }
-.tile:active {
-  transform: scale(0.985);
-}
-/* 液体封面：贴满卡顶，卡的圆角裁它 */
-.cover {
-  display: block;
-  height: 112px;
-  margin: 0 -16px 14px;
-  background: var(--inset);
-}
-.cover img {
+.bg canvas {
+  position: absolute;
+  inset: 0;
   width: 100%;
   height: 100%;
-  object-fit: cover;
   display: block;
+  opacity: 0.32;
 }
-.t-head {
+.bg::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(90deg, var(--bg) 0%, rgba(12, 12, 14, 0.7) 45%, rgba(12, 12, 14, 0.35) 100%);
+}
+.state {
+  position: relative;
+  z-index: 1;
+  padding: 40px 6%;
+  color: var(--text3);
   display: flex;
-  align-items: flex-start;
   gap: 12px;
-  margin-bottom: 14px;
+  align-items: center;
 }
-.t-titles {
-  min-width: 0;
-  flex: 1;
-}
-.t-name {
-  display: block;
-  font-size: 17px;
-  font-weight: 650;
-  line-height: 1.25;
-  letter-spacing: -0.015em;
-  color: var(--text);
-  margin: 1px 0 5px;
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
-}
-.t-pkg {
-  display: inline-block;
-  max-width: 100%;
-  font-family: var(--font-mono);
-  font-size: 12px;
-  color: var(--text3);
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-  vertical-align: bottom;
-}
-.t-count {
-  flex: none;
-  font-size: 0.76rem;
-  color: var(--text2);
-  font-weight: 500;
-  margin-top: 3px;
-}
-.t-foot {
-  display: flex;
-  align-items: flex-end;
-  justify-content: space-between;
-  gap: 10px;
-  margin-top: auto;
-  padding-top: 14px;
-}
-.ver-block .ver-label {
-  display: block;
-  font-size: 12px;
-  color: var(--text3);
-  margin-bottom: 2px;
-}
-.ver-block .ver-val {
-  font-family: var(--font-mono);
-  font-size: 0.95rem;
-  font-weight: 600;
-  color: var(--accent);
-}
-.ver-block.none .ver-val {
-  color: var(--text3);
-  font-family: var(--font);
-  font-size: 0.82rem;
+.state.err {
+  color: var(--danger-text);
 }
 
-/* 投放格：拖进来就交给上传托盘，下面一排挑有效期 */
-.temp-cell {
-  display: flex;
-  flex-direction: column;
-  gap: 8px;
-  min-height: 148px;
+.wrap {
+  position: relative;
+  z-index: 1;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1.05fr);
+  gap: 56px;
+  max-width: 1480px;
+  margin: 0 auto;
+  padding: 12px 40px 72px 6%;
 }
-.temp-cell .dropzone {
-  flex: 1;
-  border: 1.5px dashed var(--border-strong);
-  border-radius: var(--radius);
-  padding: 14px;
+
+/* ---- 左：临时文件条 + 大字名单 ---- */
+.idx {
   display: flex;
   flex-direction: column;
+  align-items: flex-start;
+  min-width: 0;
+}
+.tstrip {
+  display: flex;
+  flex-wrap: wrap;
   align-items: center;
-  justify-content: center;
-  text-align: center;
+  gap: 8px;
+  margin-bottom: 34px;
+  scroll-margin-top: 90px;
+}
+.tdz {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  height: 40px;
+  padding: 0 6px 0 16px;
+  border-radius: 20px;
+  border: 1.5px dashed var(--border-strong);
   color: var(--text2);
-  font-size: 0.78rem;
+  font-size: 13px;
   cursor: pointer;
-  background: transparent;
+  transition: border-color var(--t-fast) var(--ease-hover), color var(--t-fast) var(--ease-hover), background var(--t-fast) var(--ease-hover);
 }
-.temp-cell .dropzone:hover,
-.temp-cell .dropzone.drag {
-  border-color: var(--accent);
-  background: var(--accent-tint);
-  color: var(--accent);
+.tdz > svg {
+  width: 16px;
+  height: 16px;
+  color: var(--amber);
 }
-.dz-ico {
-  width: 30px;
-  height: 30px;
-  margin-bottom: 7px;
-  color: var(--accent);
-  opacity: 0.85;
-}
-.dz-strong {
-  display: block;
+.tdz:hover,
+.tdz.drag {
+  border-color: var(--amber);
   color: var(--text);
-  font-weight: 600;
-  margin-bottom: 3px;
+  background: var(--amber-tint);
 }
-.temp-cell .dropzone.drag .dz-strong {
-  color: var(--accent);
+.tdz :deep(.hidden-input) {
+  display: none;
 }
-.ttl-row {
-  display: flex;
-  gap: 4px;
-  padding: 3px;
-  background: var(--inset);
-  border-radius: var(--radius-sm);
-}
-.ttl,
-.seg button {
-  flex: 1;
-  white-space: nowrap;
-  padding: 5px 0;
+.tdz :deep(.dir-link) {
+  height: 28px;
+  padding: 0 10px;
   border: 0;
-  border-radius: var(--radius-xs);
-  background: transparent;
+  border-radius: 14px;
+  background: rgba(255, 255, 255, 0.06);
+  color: var(--text2);
+  font: inherit;
+  font-size: 12px;
+  cursor: pointer;
+}
+.tdz :deep(.dir-link:hover) {
+  color: var(--text);
+}
+.tttl {
+  height: 40px;
+  padding: 0 14px;
+  border: 0;
+  border-radius: 20px;
+  background: none;
   color: var(--text3);
   font: inherit;
-  font-size: 0.72rem;
+  font-size: 12px;
+  cursor: pointer;
+}
+.tttl:hover {
+  color: var(--text);
+  background: rgba(255, 255, 255, 0.06);
+}
+.ttl-pick {
+  display: grid;
+  grid-template-columns: repeat(3, auto);
+  gap: 4px;
+  padding: 2px;
+}
+.ttl-pick button {
+  height: 32px;
+  padding: 0 12px;
+  border: 0;
+  border-radius: 8px;
+  background: none;
+  color: var(--text2);
+  font: inherit;
+  font-size: 13px;
+  cursor: pointer;
+}
+.ttl-pick button:hover {
+  color: var(--text);
+  background: rgba(255, 255, 255, 0.06);
+}
+.ttl-pick button.on {
+  color: var(--text);
+  background: rgba(255, 255, 255, 0.1);
+  font-weight: 600;
+}
+.tc {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  height: 40px;
+  max-width: 280px;
+  padding: 0 14px 0 12px;
+  border: 0;
+  border-radius: 20px;
+  background: rgba(255, 255, 255, 0.06);
+  color: var(--text);
+  font: inherit;
+  font-size: 13px;
   font-weight: 600;
   cursor: pointer;
-  transition: color var(--t-fast) var(--ease-hover), background var(--t-fast) var(--ease-hover);
+  transition: background var(--t-fast) var(--ease-hover), box-shadow var(--t-fast) var(--ease-hover);
 }
-.ttl { font-family: var(--font-mono); }
-.ttl:hover,
-.seg button:hover { color: var(--text); }
-.ttl.on,
-.seg button.on {
-  color: var(--accent);
-  background: rgba(242, 243, 245, 0.08);
-  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.35);
+.tc:hover {
+  background: rgba(255, 255, 255, 0.09);
 }
-.temp-off {
-  margin: 0;
-  flex: 1;
-  display: grid;
-  place-items: center;
-  padding: 16px;
-  border: 1px solid var(--border);
-  border-radius: var(--radius);
-  font-size: 0.76rem;
+.tc.on {
+  background: rgba(255, 255, 255, 0.11);
+  box-shadow: inset 0 0 0 1.5px var(--amber);
+}
+.tc.is-fresh {
+  animation: done-pop var(--t-slow) var(--spring-soft);
+}
+.tc .tn {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.tc small {
+  flex: none;
+  font-size: 12px;
+  font-weight: 500;
   color: var(--text3);
-  text-align: center;
 }
-
-/* 临时卡 */
-.temp-tile {
-  background: var(--surface);
-  border: 1px solid var(--border);
-  border-radius: var(--radius);
-  padding: 16px;
-  min-height: 148px;
-  display: flex;
-  flex-direction: column;
-  text-align: left;
-  color: inherit;
-  cursor: pointer;
-  transition: box-shadow var(--t-fast) var(--ease-out), border-color var(--t-fast) var(--ease-out), transform var(--t-fast) var(--ease-out);
-}
-.temp-tile:hover {
-  border-color: var(--border-strong);
-  box-shadow: 0 8px 28px rgba(0, 0, 0, 0.4);
-}
-.temp-tile:active {
-  transform: scale(0.985);
-}
-.tt-head {
-  display: flex;
-  align-items: center;
-  gap: 13px;
-  margin-bottom: 13px;
+.tc small.warn {
+  color: var(--amber);
 }
 .ring {
   flex: none;
-  width: 46px;
-  height: 46px;
-  position: relative;
-  color: var(--accent);
+  width: 14px;
+  height: 14px;
+  border-radius: 50%;
+  background: conic-gradient(var(--accent) var(--p), rgba(255, 255, 255, 0.12) 0);
 }
 .ring.warn {
-  color: var(--amber);
+  background: conic-gradient(var(--amber) var(--p), rgba(255, 255, 255, 0.12) 0);
 }
-.ring-track {
-  fill: none;
-  stroke: rgba(242, 243, 245, 0.1);
-  stroke-width: 3.2;
+.temp-off {
+  margin: 0 0 34px;
+  font-size: 13px;
+  color: var(--text3);
 }
-.ring-arc {
-  fill: none;
-  stroke: currentColor;
-  stroke-width: 3.2;
-  stroke-linecap: round;
-  transition: stroke-dashoffset var(--t-slow) var(--ease-out);
+.grp {
+  margin: 30px 0 6px;
+  font-size: 13px;
+  color: var(--text3);
 }
-.rtxt {
-  position: absolute;
-  inset: 0;
-  display: grid;
-  place-items: center;
-  font-family: var(--font-mono);
-  font-size: 0.6rem;
-  font-weight: 600;
-  color: currentColor;
-  letter-spacing: -0.02em;
+.tstrip + .grp,
+.temp-off + .grp {
+  margin-top: 0;
 }
-.tt-body {
-  min-width: 0;
-  flex: 1;
-}
-.tt-name {
-  display: block;
-  font-size: 0.94rem;
-  font-weight: 650;
-  line-height: 1.3;
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
-}
-.tt-meta {
-  font-size: 0.7rem;
-  color: var(--text2);
-  font-family: var(--font-mono);
-}
-.tt-foot {
+.it {
   display: flex;
-  align-items: center;
-  gap: 8px;
-  margin-top: auto;
+  align-items: baseline;
+  gap: 14px;
+  max-width: 100%;
+  padding: 5px 0;
+  border: 0;
+  background: none;
+  text-align: left;
+  font: inherit;
+  color: var(--text3);
+  cursor: pointer;
 }
-.mini-tag {
+.it b {
+  font-size: 40px;
+  line-height: 1.1;
+  font-weight: 650;
+  letter-spacing: -0.04em;
+  overflow-wrap: anywhere;
+  transition: color var(--t-fast) var(--ease-hover);
+}
+.it span {
   flex: none;
-  font-size: 0.64rem;
-  font-weight: 700;
-  letter-spacing: 0.04em;
-  color: var(--accent);
-  background: var(--accent-tint);
-  padding: 4px 9px;
-  border-radius: 999px;
-  line-height: 1.2;
+  font-size: 13px;
+  transition: color var(--t-fast) var(--ease-hover);
 }
-.mini-tag.folder {
-  color: var(--indigo);
-  background: var(--indigo-tint);
+.it:hover b,
+.it.on b,
+.it:focus-visible b {
+  color: var(--text);
 }
-.tt-rem {
-  margin-left: auto;
-  font-size: 0.72rem;
+.it.on span {
   color: var(--text2);
-  font-family: var(--font-mono);
+}
+.it:focus-visible {
+  outline: none;
+}
+.empty {
+  margin: 0;
+  font-size: 15px;
+  color: var(--text2);
 }
 
-/* 新建浮层里的短表单 */
-.lform { width: 320px; max-width: 100%; }
-.l-title { margin: 0 0 12px; font-size: 0.95rem; font-weight: 700; }
-.lbl {
+/* ---- 右：选中项的内容物，跟着滚动停在视口里 ---- */
+.pane {
+  position: sticky;
+  top: 92px;
+  align-self: start;
+  max-height: calc(100vh - 110px);
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  padding-bottom: 24px;
+}
+
+/* ---- 「新建」浮层 ---- */
+.pick {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  width: 320px;
+}
+.opt {
+  display: flex;
+  align-items: flex-start;
+  gap: 12px;
+  padding: 12px;
+  border: 0;
+  border-radius: var(--radius-sm);
+  background: none;
+  text-align: left;
+  font: inherit;
+  color: inherit;
+  cursor: pointer;
+}
+.opt:hover {
+  background: rgba(255, 255, 255, 0.06);
+}
+.opt-k {
+  flex: none;
+  width: 8px;
+  height: 8px;
+  margin-top: 7px;
+  border-radius: 50%;
+}
+.opt-k.k-app {
+  background: var(--accent);
+}
+.opt-k.k-res {
+  background: var(--green);
+}
+.opt-t b {
   display: block;
+  font-size: 15px;
+  font-weight: 650;
+}
+.opt-t small {
+  display: block;
+  margin-top: 3px;
+  font-size: 12px;
+  line-height: 1.5;
+  color: var(--text3);
+}
+.lform {
+  width: 320px;
+  max-width: 100%;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.l-title {
+  margin: 0 0 4px;
+  font-weight: 650;
+}
+.lbl {
   font-size: 12px;
   color: var(--text2);
-  margin: 12px 0 6px;
 }
-.l-title + .lbl { margin-top: 0; }
-.lform .input { padding: 9px 12px; font-size: 14px; background: var(--surface); }
-.lform .textarea { background: var(--surface); }
 .seg {
   display: flex;
-  gap: 4px;
+  gap: 3px;
   padding: 3px;
-  background: var(--inset);
-  border-radius: var(--radius-sm);
+  border-radius: 10px;
+  background: rgba(255, 255, 255, 0.04);
+  box-shadow: inset 0 0 0 1px var(--border);
 }
-.seg button { padding: 7px 0; font-size: 0.78rem; }
+.seg button {
+  flex: 1;
+  height: 30px;
+  border: 0;
+  border-radius: 7px;
+  background: none;
+  color: var(--text3);
+  font: inherit;
+  font-size: 13px;
+  cursor: pointer;
+}
+.seg button.on {
+  color: var(--text);
+  background: rgba(255, 255, 255, 0.09);
+  font-weight: 600;
+}
 .row {
   display: flex;
   justify-content: flex-end;
   gap: 8px;
-  margin-top: 16px;
+  margin-top: 6px;
 }
 
-/* 临时卡上的复制钮：纯字形按钮，hover 只动墨阶不铺底（Hrige 纯字形按钮） */
-.tt-copy {
-  flex: none;
-  width: 26px;
-  height: 26px;
-  margin-left: 6px;
-  display: grid;
-  place-items: center;
-  border: 0;
-  background: none;
-  color: var(--text3);
-  cursor: pointer;
-  transition: color var(--t-fast) var(--ease-hover);
-}
-.tt-copy:hover { color: var(--accent); }
-.tt-copy.is-copied { color: var(--green); }
-.tt-copy svg { width: 15px; height: 15px; }
-/* 刚传完的那张：带弹性浮上来，绿边慢慢退回常态 */
-.temp-tile.is-fresh {
-  animation: done-pop var(--t-slow) var(--spring-soft), fresh-edge 2.4s var(--ease-out) both;
-}
-@keyframes fresh-edge {
-  from { border-color: rgba(52, 211, 153, 0.7); box-shadow: 0 0 0 3px rgba(52, 211, 153, 0.15); }
-  to { border-color: var(--border); box-shadow: none; }
+@media (max-width: 760px) {
+  .wrap {
+    grid-template-columns: minmax(0, 1fr);
+    padding: 0 22px 56px;
+  }
+  .pane {
+    display: none;
+  }
+  .it b {
+    font-size: 32px;
+  }
+  .drag-only {
+    display: none;
+  }
+  .bg::after {
+    background: linear-gradient(180deg, rgba(12, 12, 14, 0.3) 0%, var(--bg) 70%);
+  }
 }
 </style>

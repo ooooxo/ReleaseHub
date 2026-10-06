@@ -1,0 +1,663 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<title>对照版 · 总览构图（参考入口页）</title>
+<!--
+  干什么：ReleaseHub「总览」整页构图的多档对照，参考 ooooxo.com 入口页。第 0 档 = 现状（照现行 HomeView + 侧栏抄），1–6 档各是一套完整构图。
+         已经定下、每一档都遵守的：token 取值（global.css）· 墨色胶囊主键 / 内描线次键 · ooooxo 字标 · 液体用入口页的 liquid.js · 一屏一颗主键。
+         这轮只比：有没有侧栏 / 一次看一个还是看全部 / 液体占多大 / 临时文件与磁盘放哪 / 新建放哪。
+  怎么跑：/usr/bin/open 这个文件（液体从 https://www.ooooxo.com/liquid.js 取，需要联网）。
+         数字切档 · R 换轮次 · C 与现状来回对照 · S 换样本（稀 / 中 / 满）· M 桌面 1440 ↔ 手机 390 · ↑↓ 换选中的库（第二轮指上去也换）。
+         第二轮（用户挑了第一轮的 5「索引」）：钉住「左大字索引 + 右内容物」，只比液体怎么退成背景、右侧内容怎么承载。
+  需要什么：../../frontend/src/styles/global.css（项目 token 与按钮、胶囊等原子）。
+-->
+<link rel="stylesheet" href="../../frontend/src/styles/global.css">
+<script src="https://www.ooooxo.com/liquid.js"></script>
+<style>
+/* ---- 可调参数 ---- */
+:root { --face-w: 1440px; --face-h: 860px; }
+
+html, body { height: 100%; overflow: hidden; }
+body { display: flex; flex-direction: column; }
+#app { display: none; }
+
+/* ================= 实验台自己的一条 ================= */
+.lab { flex: none; display: flex; flex-direction: column; gap: 8px; padding: 14px 24px 10px; border-bottom: 1px solid var(--border); background: #08080a; position: relative; z-index: 10; }
+.lab-top { display: flex; align-items: center; gap: 14px; flex-wrap: wrap; }
+.lab h1 { margin: 0; font-size: 15px; font-weight: 650; white-space: nowrap; }
+.pick { display: flex; flex-wrap: wrap; gap: 2px; }
+.pick button { height: 28px; padding: 0 10px; border: 0; border-radius: 8px; background: none; font: inherit; font-size: 13px; color: var(--text3); cursor: pointer; display: inline-flex; gap: 6px; align-items: center; }
+.pick button b { font-family: var(--font-mono); font-weight: 450; }
+.pick button:hover { color: var(--text); background: rgba(255,255,255,.05); }
+.pick button[aria-pressed="true"] { color: var(--text); background: rgba(255,255,255,.09); font-weight: 600; }
+.pick button[aria-pressed="true"] b { color: var(--accent); }
+.lab-sep { width: 1px; height: 14px; background: var(--border-strong); }
+.keys { margin-left: auto; font-size: 12px; color: var(--text3); white-space: nowrap; }
+.keys kbd { font-family: var(--font-mono); padding: 0 4px; border-radius: 4px; background: rgba(255,255,255,.07); color: var(--text2); }
+.note { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; min-height: 22px; }
+.thesis { font-size: 14px; font-weight: 650; margin-right: 4px; }
+.part { font-size: 12px; padding: 2px 8px; border-radius: 6px; background: rgba(255,255,255,.06); color: var(--text2); }
+.part i { font-style: normal; color: var(--text3); margin-right: 4px; }
+.cost { font-size: 12px; color: var(--amber); }
+.stage { flex: 1; min-height: 0; overflow: auto; padding: 20px 24px 40px; display: flex; justify-content: center; align-items: flex-start; }
+
+/* ================= 被比较的：一整页（固定视口尺寸，用容器查询做手机） ================= */
+.face { position: relative; flex: none; width: var(--face-w); height: var(--face-h); overflow: auto; background: var(--bg); border-radius: 12px; box-shadow: 0 0 0 1px var(--border), 0 30px 80px rgba(0,0,0,.6); container-type: inline-size; }
+.face * { box-sizing: border-box; }
+
+/* 共用零件（只吃 token） */
+.wm { font-size: 14px; font-weight: 700; letter-spacing: -0.01em; }
+.sub { font-size: 13px; color: var(--text3); }
+.num { font-family: var(--font-mono); font-variant-numeric: tabular-nums; }
+.k-app { --kc: var(--accent); } .k-res { --kc: var(--green); } .k-temp { --kc: var(--amber); }
+.kind { font-size: 12px; color: var(--kc); white-space: nowrap; }
+.kind::before { content: ''; display: inline-block; width: 6px; height: 6px; border-radius: 9px; background: var(--kc); margin-right: 6px; vertical-align: 1px; }
+.pill { font-size: 12px; padding: 3px 10px; border-radius: 99px; background: rgba(255,255,255,.06); color: var(--text2); white-space: nowrap; }
+.pill.k { color: var(--kc); background: color-mix(in srgb, var(--kc) 14%, transparent); }
+.pill.warn { color: var(--amber); background: var(--amber-tint); }
+.gl { width: 36px; height: 36px; display: grid; place-items: center; border: 0; background: none; border-radius: 18px; color: var(--text3); cursor: pointer; position: relative; }
+.gl:hover { color: var(--text); background: rgba(255,255,255,.06); }
+.gl svg { width: 18px; height: 18px; }
+.gl .badge { position: absolute; top: 3px; right: 2px; min-width: 16px; height: 16px; padding: 0 4px; border-radius: 8px; background: var(--amber); color: var(--bg); font-size: 10px; font-weight: 700; display: grid; place-items: center; }
+.thumb { flex: none; width: 78px; height: 52px; border-radius: 7px; overflow: hidden; background: var(--inset); }
+.thumb img, .cov img { width: 100%; height: 100%; object-fit: cover; display: block; }
+.art { position: absolute; overflow: hidden; }
+.art canvas { position: absolute; inset: 0; width: 100%; height: 100%; display: block; }
+.fade-l::after { content: ''; position: absolute; inset: 0 0 0 -2px; pointer-events: none; background: linear-gradient(90deg, var(--bg) 0%, var(--bg) 3%, rgba(12,12,14,0) 32%); }
+.fade-b::after { content: ''; position: absolute; inset: 0; pointer-events: none; background: linear-gradient(180deg, rgba(12,12,14,.15) 0%, rgba(12,12,14,0) 30%, var(--bg) 98%); }
+.dz { display: flex; align-items: center; justify-content: center; gap: 10px; border: 1.5px dashed var(--border-strong); border-radius: var(--radius); color: var(--text2); font-size: 13px; }
+.dz svg { width: 18px; height: 18px; color: var(--accent); }
+.meter { height: 6px; border-radius: 9px; background: var(--inset); overflow: hidden; }
+.meter i { display: block; height: 100%; border-radius: 9px; background: var(--accent); }
+.meter.warn i { background: var(--amber); }
+.trow { display: flex; align-items: center; gap: 12px; padding: 10px 12px; border-radius: var(--radius); background: var(--surface); box-shadow: inset 0 0 0 1px var(--border); }
+.trow .nm { flex: 1; min-width: 0; font-size: 14px; font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.trow .left { font-size: 12px; color: var(--text3); white-space: nowrap; }
+.trow .prog { width: 80px; margin: 0; }
+.empty-note { font-size: 13px; color: var(--text3); }
+canvas[data-live] { position: absolute; inset: 0; width: 100%; height: 100%; display: block; }
+.disk { font-size: 12px; color: var(--text3); white-space: nowrap; margin-right: 8px; }
+.disk.warn { color: var(--amber); }
+.row .ver { font-family: var(--font-mono); font-size: 13px; color: var(--text2); white-space: nowrap; }
+/* 压在液体上的顶栏：图标与小字垫一层柔影，亮处不被吞（入口页同一做法） */
+.v1 .top .gl, .v6 .top .gl, .v4 .top .gl { color: var(--text2); filter: drop-shadow(0 0 6px rgba(0,0,0,.65)); }
+.v1 .top .disk, .v6 .top .disk, .v4 .top .disk, .v4 .top .sub { color: var(--text2); text-shadow: 0 0 8px rgba(0,0,0,.8); }
+.top .disk.warn { color: var(--amber); }
+
+/* ---------- 0 现状：侧栏 + 内容区（照 HomeView / ServerStatusStrip 抄） ---------- */
+.v0 { display: flex; min-height: 100%; }
+.v0 .rail { flex: none; width: 248px; border-right: 1px solid var(--border); padding: 22px 16px; display: flex; flex-direction: column; gap: 22px; }
+.v0 .rail .brand { display: flex; gap: 10px; align-items: baseline; }
+.v0 .disk { background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius); padding: 15px; display: flex; flex-direction: column; gap: 8px; }
+.v0 .disk b { font-family: var(--font-mono); font-size: 27px; }
+.v0 .rail nav { margin-top: auto; border-top: 1px solid var(--border); padding-top: 14px; display: flex; flex-direction: column; gap: 3px; font-size: 14px; font-weight: 600; color: var(--text2); }
+.v0 .rail nav span { padding: 10px 12px; }
+.v0 .main { flex: 1; min-width: 0; max-width: 1100px; margin: 0 auto; padding: 28px 64px 48px; }
+.v0 .head { display: flex; justify-content: space-between; align-items: baseline; }
+.v0 .head h1 { margin: 0; font-size: 32px; }
+.v0 h2 { font-size: 20px; font-weight: 650; margin: 0; }
+.v0 .bar { display: flex; align-items: baseline; gap: 10px; margin: 26px 0 12px; }
+.v0 .bar .acts { margin-left: auto; display: flex; gap: 8px; }
+.v0 .grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(245px, 1fr)); gap: 13px; }
+.v0 .tile { background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius); overflow: hidden; min-height: 148px; display: flex; flex-direction: column; padding: 0 16px 16px; }
+.v0 .tile .cov { height: 112px; margin: 0 -16px 14px; background: var(--inset); }
+.v0 .tile .nm { font-size: 17px; font-weight: 650; display: flex; justify-content: space-between; }
+.v0 .tile .nm small { font-size: 12px; color: var(--text2); font-weight: 500; }
+.v0 .tile .ft { margin-top: auto; padding-top: 14px; display: flex; justify-content: space-between; align-items: flex-end; }
+.v0 .tile .ft span { font-size: 12px; color: var(--text3); display: block; }
+.v0 .tile .ft b { font-family: var(--font-mono); color: var(--accent); font-weight: 600; }
+.v0 .temps { display: grid; grid-template-columns: repeat(auto-fill, minmax(245px, 1fr)); gap: 13px; }
+.v0 .temps .dz { min-height: 148px; flex-direction: column; }
+.v0 .temps .tc { background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius); padding: 16px; font-size: 14px; font-weight: 600; }
+.v0 .temps .tc small { display: block; margin-top: 60px; font-size: 12px; color: var(--text3); font-weight: 400; }
+@container (max-width: 600px) {
+  .v0 { flex-direction: column; } .v0 .rail { width: 100%; border-right: 0; } .v0 .main { padding: 20px; } .v0 .grid, .v0 .temps { grid-template-columns: 1fr; }
+}
+
+/* ---------- 1 单幅舞台：完全照入口页 ---------- */
+.v1 { position: relative; height: 100%; overflow: hidden; }
+.v1 .top { position: absolute; left: 0; right: 0; top: 0; z-index: 5; display: flex; align-items: center; gap: 6px; padding: 28px 40px; }
+.v1 .top .brand { display: flex; gap: 10px; align-items: baseline; margin-right: auto; }
+.v1 .top .disk { font-size: 12px; color: var(--text3); margin-right: 8px; }
+.v1 .art { right: 0; top: 0; bottom: 0; width: 62%; }
+.v1 .side { position: absolute; left: 6%; top: 0; bottom: 120px; width: 36%; z-index: 4; display: flex; flex-direction: column; justify-content: center; gap: 20px; }
+.v1 .count { font-size: 14px; color: var(--text3); } .v1 .count b { color: var(--text); font-weight: 500; }
+.v1 h1 { margin: 0; font-size: clamp(48px, 5.8cqw, 88px); line-height: 1.02; font-weight: 650; letter-spacing: -0.045em; }
+.v1 .desc { font-size: 16px; color: var(--text2); line-height: 1.6; }
+.v1 .chips { display: flex; flex-wrap: wrap; gap: 8px; }
+.v1 .acts { display: flex; gap: 10px; }
+.v1 .acts .btn { height: 44px; border-radius: 22px; padding: 0 20px; }
+.v1 .strip { position: absolute; left: 6%; right: 6%; bottom: 32px; z-index: 6; display: flex; gap: 8px; overflow-x: auto; padding: 4px; align-items: flex-end; }
+.v1 .th { flex: none; width: 76px; height: 50px; border-radius: 6px; overflow: hidden; opacity: .4; cursor: pointer; border: 0; padding: 0; background: var(--inset); outline: 1px solid transparent; outline-offset: 3px; }
+.v1 .th:hover { opacity: .8; } .v1 .th.on { opacity: 1; outline-color: rgba(255,255,255,.6); }
+.v1 .th.new { opacity: .7; display: grid; place-items: center; color: var(--text2); box-shadow: inset 0 0 0 1px var(--border-strong); background: none; }
+.v1 .th.new svg { width: 18px; height: 18px; }
+@container (max-width: 600px) {
+  .v1 .top { padding: 18px 14px 0 22px; } .v1 .top .disk, .v1 .top .sub { display: none; }
+  .v1 .art { width: 100%; height: 58%; bottom: auto; } .v1 .art.fade-l::after { inset: 0; background: linear-gradient(180deg, rgba(12,12,14,0) 40%, var(--bg) 98%); }
+  .v1 .side { left: 22px; right: 22px; width: auto; top: auto; bottom: 40px; justify-content: flex-end; gap: 14px; }
+  .v1 h1 { font-size: 42px; } .v1 .acts .btn { flex: 1; } .v1 .strip { display: none; }
+}
+
+/* ---------- 2 入口管理页式：顶栏 + 列表 + 粘性预览面 ---------- */
+.v2 .top { position: sticky; top: 0; z-index: 5; display: flex; align-items: center; gap: 10px; padding: 18px 32px; background: linear-gradient(var(--bg) 70%, rgba(12,12,14,0)); }
+.v2 .top .sub { margin-right: auto; }
+.v2 .main { display: grid; grid-template-columns: minmax(0, 1fr) 420px; gap: 40px; padding: 12px 32px 64px; max-width: 1240px; margin: 0 auto; }
+.v2 .sec { display: flex; align-items: baseline; gap: 12px; margin: 0 0 14px; }
+.v2 .sec h2 { margin: 0; font-size: 20px; font-weight: 650; letter-spacing: -0.02em; }
+.v2 .sec .cnt { font-size: 13px; color: var(--text3); }
+.v2 .list { display: flex; flex-direction: column; gap: 8px; margin-bottom: 36px; }
+.v2 .row { display: flex; align-items: center; gap: 14px; padding: 10px; border-radius: var(--radius); background: var(--surface); box-shadow: inset 0 0 0 1px var(--border); cursor: pointer; }
+.v2 .row:hover { box-shadow: inset 0 0 0 1px var(--border-strong); }
+.v2 .row.on { box-shadow: inset 0 0 0 1px rgba(56,189,248,.5); background: var(--surface2); }
+.v2 .row .info { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 4px; }
+.v2 .row .nm { font-size: 15px; font-weight: 600; }
+.v2 .row .meta { display: flex; gap: 10px; align-items: center; font-size: 12px; color: var(--text3); }
+.v2 .row .ver { font-family: var(--font-mono); font-size: 13px; color: var(--text2); }
+.v2 .panel { position: sticky; top: 76px; align-self: start; display: flex; flex-direction: column; gap: 16px; padding: 18px; border-radius: 16px; background: var(--surface); box-shadow: inset 0 0 0 1px var(--border); }
+.v2 .preview { position: relative; aspect-ratio: 3 / 2; border-radius: 10px; overflow: hidden; background: var(--inset); }
+.v2 .panel h3 { margin: 0; font-size: 22px; font-weight: 650; letter-spacing: -0.02em; }
+.v2 .kv { display: flex; flex-direction: column; } .v2 .kv div { display: flex; justify-content: space-between; padding: 9px 0; border-top: 1px solid var(--border); font-size: 13px; color: var(--text2); } .v2 .kv div:first-child { border-top: 0; } .v2 .kv b { color: var(--text); font-weight: 550; }
+.v2 .panel .acts { display: flex; gap: 10px; } .v2 .panel .acts .btn-primary { flex: 1; }
+.v2 .temp .dz { height: 64px; margin-bottom: 8px; }
+.v2 .disk { display: flex; flex-direction: column; gap: 6px; font-size: 12px; color: var(--text3); }
+@container (max-width: 600px) {
+  .v2 .top { padding: 14px 16px; } .v2 .top .sub { display: none; } .v2 .top .wm { margin-right: auto; } .v2 .top .btn-ghost { display: none; }
+  .v2 .main { grid-template-columns: minmax(0, 1fr); padding: 8px 16px 48px; } .v2 .panel { display: none; }
+}
+
+/* ---------- 3 画廊：大封面网格 ---------- */
+.v3 .top { display: flex; align-items: center; gap: 6px; padding: 28px 40px; }
+.v3 .top .brand { display: flex; gap: 10px; align-items: baseline; margin-right: auto; }
+.v3 .main { padding: 0 40px 64px; max-width: 1360px; margin: 0 auto; }
+.v3 .hero { display: flex; align-items: flex-end; gap: 20px; margin: 24px 0 36px; }
+.v3 .hero h1 { margin: 0; font-size: 72px; line-height: 1; font-weight: 650; letter-spacing: -0.045em; }
+.v3 .hero .chips { display: flex; gap: 8px; margin-bottom: 8px; }
+.v3 .hero .acts { margin-left: auto; display: flex; gap: 10px; }
+.v3 .temps { display: flex; gap: 10px; margin-bottom: 36px; overflow-x: auto; }
+.v3 .temps .dz { flex: none; width: 220px; height: 56px; }
+.v3 .temps .tchip { flex: none; display: flex; align-items: center; gap: 10px; height: 56px; padding: 0 16px; border-radius: var(--radius); background: var(--surface); box-shadow: inset 0 0 0 1px var(--border); font-size: 14px; font-weight: 600; }
+.v3 .temps .tchip small { color: var(--amber); font-weight: 500; font-size: 12px; }
+.v3 .grid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 18px; }
+.v3 .card { position: relative; aspect-ratio: 16 / 10; border-radius: 14px; overflow: hidden; background: var(--inset); cursor: pointer; }
+.v3 .card .cov { position: absolute; inset: 0; transition: transform .6s var(--ease-out); }
+.v3 .card:hover .cov { transform: scale(1.04); }
+.v3 .card::after { content: ''; position: absolute; inset: 0; background: linear-gradient(180deg, rgba(12,12,14,0) 40%, rgba(12,12,14,.85) 100%); }
+.v3 .card .cap { position: absolute; left: 18px; right: 18px; bottom: 16px; z-index: 2; display: flex; align-items: flex-end; gap: 10px; }
+.v3 .card .cap b { flex: 1; font-size: 24px; font-weight: 650; letter-spacing: -0.03em; }
+.v3 .card .cap .ver { font-family: var(--font-mono); font-size: 13px; color: rgba(242,243,245,.8); }
+.v3 .card .tl { position: absolute; left: 16px; top: 14px; z-index: 2; background: rgba(12,12,14,.6); backdrop-filter: blur(8px); -webkit-backdrop-filter: blur(8px); }
+@container (max-width: 600px) {
+  .v3 .top { padding: 20px 22px; } .v3 .top .sub, .v3 .top .disk { display: none; } .v3 .main { padding: 0 22px 48px; }
+  .v3 .hero { flex-wrap: wrap; } .v3 .hero h1 { font-size: 46px; } .v3 .hero .acts { margin-left: 0; width: 100%; } .v3 .hero .acts .btn { flex: 1; }
+  .v3 .grid { grid-template-columns: 1fr; }
+}
+
+/* ---------- 4 舞台在上：液体横幅 + 列表 ---------- */
+.v4 .banner { position: relative; height: 420px; }
+.v4 .banner .art { inset: 0; }
+.v4 .top { position: absolute; left: 0; right: 0; top: 0; z-index: 5; display: flex; align-items: center; gap: 6px; padding: 28px 40px; }
+.v4 .top .brand { display: flex; gap: 10px; align-items: baseline; margin-right: auto; }
+.v4 .bh { position: absolute; left: 40px; right: 40px; bottom: 36px; z-index: 4; display: flex; align-items: flex-end; gap: 20px; }
+.v4 .bh h1 { margin: 0; font-size: 80px; line-height: 1; font-weight: 650; letter-spacing: -0.045em; }
+.v4 .bh .chips { display: flex; gap: 8px; margin-bottom: 10px; }
+.v4 .bh .acts { margin-left: auto; display: flex; gap: 10px; }
+.v4 .main { padding: 8px 40px 64px; display: grid; grid-template-columns: minmax(0, 1fr) 340px; gap: 40px; max-width: 1360px; margin: 0 auto; }
+.v4 .sec { display: flex; align-items: baseline; gap: 12px; margin: 0 0 14px; } .v4 .sec h2 { margin: 0; font-size: 20px; font-weight: 650; } .v4 .sec .cnt { font-size: 13px; color: var(--text3); }
+.v4 .list { display: flex; flex-direction: column; gap: 8px; }
+.v4 .row { display: flex; align-items: center; gap: 14px; padding: 10px; border-radius: var(--radius); background: var(--surface); box-shadow: inset 0 0 0 1px var(--border); }
+.v4 .row .info { flex: 1; min-width: 0; } .v4 .row .nm { font-size: 15px; font-weight: 600; display: block; } .v4 .row .meta { display: flex; gap: 10px; margin-top: 4px; font-size: 12px; color: var(--text3); }
+.v4 .row .ver { font-family: var(--font-mono); font-size: 13px; color: var(--text2); }
+.v4 .temp .dz { height: 64px; margin-bottom: 8px; }
+.v4 .temp .trow { margin-bottom: 8px; }
+@container (max-width: 600px) {
+  .v4 .banner { height: 320px; } .v4 .top { padding: 20px 22px; } .v4 .top .sub, .v4 .top .disk { display: none; }
+  .v4 .bh { left: 22px; right: 22px; bottom: 20px; flex-wrap: wrap; } .v4 .bh h1 { font-size: 46px; } .v4 .bh .acts { margin-left: 0; width: 100%; } .v4 .bh .acts .btn { flex: 1; }
+  .v4 .main { grid-template-columns: minmax(0, 1fr); padding: 8px 16px 48px; }
+}
+
+/* ---------- 5 索引：大字名单 + 一幅液体 ---------- */
+.v5 { position: relative; min-height: 100%; }
+.v5 .top { position: sticky; top: 0; z-index: 5; display: flex; align-items: center; gap: 6px; padding: 28px 40px; background: linear-gradient(var(--bg) 70%, rgba(12,12,14,0)); }
+.v5 .top .brand { display: flex; gap: 10px; align-items: baseline; margin-right: auto; }
+.v5 .art { position: fixed; }
+.v5 .wrap { display: grid; grid-template-columns: minmax(0, 1fr) 46%; gap: 48px; padding: 0 0 64px 6%; }
+.v5 .idx { display: flex; flex-direction: column; padding-top: 20px; }
+.v5 .grp { font-size: 13px; color: var(--text3); margin: 28px 0 8px; } .v5 .grp:first-child { margin-top: 0; }
+.v5 .it { display: flex; align-items: baseline; gap: 14px; padding: 6px 0; cursor: pointer; border: 0; background: none; text-align: left; font: inherit; color: var(--text3); }
+.v5 .it b { font-size: 40px; line-height: 1.12; font-weight: 650; letter-spacing: -0.04em; transition: color .16s var(--ease-hover); }
+.v5 .it span { font-family: var(--font-mono); font-size: 13px; }
+.v5 .it:hover b, .v5 .it.on b { color: var(--text); }
+.v5 .it.on span { color: var(--text2); }
+.v5 .pane { position: sticky; top: 90px; align-self: start; display: flex; flex-direction: column; gap: 16px; }
+.v5 .pane .pv { position: relative; height: 460px; border-radius: 16px 0 0 16px; overflow: hidden; }
+.v5 .pane .info { padding-right: 40px; display: flex; flex-direction: column; gap: 14px; }
+.v5 .pane .chips { display: flex; gap: 8px; flex-wrap: wrap; }
+.v5 .pane .desc { font-size: 15px; color: var(--text2); }
+.v5 .pane .acts { display: flex; gap: 10px; }
+.v5 .new { display: flex; gap: 10px; margin-top: 28px; }
+@container (max-width: 600px) {
+  .v5 .top { padding: 20px 22px; } .v5 .top .sub, .v5 .top .disk { display: none; }
+  .v5 .wrap { grid-template-columns: minmax(0, 1fr); padding: 0 22px 48px; } .v5 .pane { display: none; } .v5 .it b { font-size: 32px; }
+}
+
+/* ---------- 6 舞台 + 全表：首屏单幅，往下是全部 ---------- */
+.v6 .stagebox { position: relative; height: 100%; min-height: 640px; overflow: hidden; }
+.v6 .top { position: absolute; left: 0; right: 0; top: 0; z-index: 5; display: flex; align-items: center; gap: 6px; padding: 28px 40px; }
+.v6 .top .brand { display: flex; gap: 10px; align-items: baseline; margin-right: auto; }
+.v6 .top .disk { font-size: 12px; color: var(--text3); margin-right: 8px; }
+.v6 .art { right: 0; top: 0; bottom: 0; width: 62%; }
+.v6 .side { position: absolute; left: 6%; top: 0; bottom: 110px; width: 36%; z-index: 4; display: flex; flex-direction: column; justify-content: center; gap: 20px; }
+.v6 .count { font-size: 14px; color: var(--text3); } .v6 .count b { color: var(--text); font-weight: 500; }
+.v6 h1 { margin: 0; font-size: clamp(48px, 5.8cqw, 88px); line-height: 1.02; font-weight: 650; letter-spacing: -0.045em; }
+.v6 .desc { font-size: 16px; color: var(--text2); }
+.v6 .chips { display: flex; flex-wrap: wrap; gap: 8px; }
+.v6 .acts { display: flex; gap: 10px; } .v6 .acts .btn { height: 44px; border-radius: 22px; padding: 0 20px; }
+.v6 .cue { position: absolute; left: 6%; bottom: 36px; z-index: 6; font-size: 13px; color: var(--text3); display: flex; gap: 8px; align-items: center; }
+.v6 .cue svg { width: 14px; height: 14px; }
+.v6 .rest { padding: 24px 6% 64px; display: grid; grid-template-columns: minmax(0, 1fr) 340px; gap: 40px; }
+.v6 .sec { display: flex; align-items: baseline; gap: 12px; margin: 0 0 14px; } .v6 .sec h2 { margin: 0; font-size: 20px; font-weight: 650; } .v6 .sec .cnt { font-size: 13px; color: var(--text3); margin-right: auto; }
+.v6 .list { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; }
+.v6 .row { display: flex; align-items: center; gap: 14px; padding: 10px; border-radius: var(--radius); background: var(--surface); box-shadow: inset 0 0 0 1px var(--border); cursor: pointer; }
+.v6 .row:hover { box-shadow: inset 0 0 0 1px var(--border-strong); }
+.v6 .row.on { box-shadow: inset 0 0 0 1px rgba(56,189,248,.5); }
+.v6 .row .info { flex: 1; min-width: 0; } .v6 .row .nm { font-size: 15px; font-weight: 600; display: block; } .v6 .row .meta { display: flex; gap: 10px; margin-top: 4px; font-size: 12px; color: var(--text3); }
+.v6 .temp .dz { height: 64px; margin-bottom: 8px; } .v6 .temp .trow { margin-bottom: 8px; }
+@container (max-width: 600px) {
+  .v6 .top { padding: 18px 14px 0 22px; } .v6 .top .disk, .v6 .top .sub { display: none; }
+  .v6 .art { width: 100%; height: 58%; bottom: auto; } .v6 .art.fade-l::after { inset: 0; background: linear-gradient(180deg, rgba(12,12,14,0) 40%, var(--bg) 98%); }
+  .v6 .side { left: 22px; right: 22px; width: auto; top: auto; bottom: 70px; justify-content: flex-end; gap: 14px; } .v6 h1 { font-size: 42px; } .v6 .acts .btn { flex: 1; } .v6 .cue { left: 22px; bottom: 28px; }
+  .v6 .rest { grid-template-columns: minmax(0, 1fr); padding: 16px 16px 48px; } .v6 .list { grid-template-columns: minmax(0, 1fr); }
+}
+
+/* ================= 第二轮：索引（左）+ 内容（右），液体退成背景 ================= */
+.r2 { position: relative; min-height: 100%; }
+.r2 .bg { position: sticky; top: 0; height: var(--face-h); margin-bottom: calc(-1 * var(--face-h)); z-index: 0; overflow: hidden; pointer-events: none; }
+.r2 .bg canvas { position: absolute; inset: 0; width: 100%; height: 100%; display: block; }
+.r2 .bg::after { content: ''; position: absolute; inset: 0; }
+.r2 > .fg { position: relative; z-index: 1; }
+.r2 .top { position: sticky; top: 0; z-index: 5; display: flex; align-items: center; gap: 6px; padding: 28px 40px; }
+.r2 .top .brand { display: flex; gap: 10px; align-items: baseline; margin-right: auto; }
+.r2 .top .gl { color: var(--text2); }
+.r2 .wrap { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1.05fr); gap: 56px; padding: 8px 40px 64px 6%; }
+.r2 .idx { display: flex; flex-direction: column; padding-top: 8px; }
+.r2 .grp { font-size: 13px; color: var(--text3); margin: 30px 0 6px; } .r2 .grp:first-child { margin-top: 0; }
+.r2 .it { display: flex; align-items: baseline; gap: 14px; padding: 5px 0; border: 0; background: none; text-align: left; font: inherit; color: var(--text3); cursor: pointer; }
+.r2 .it b { font-size: 40px; line-height: 1.1; font-weight: 650; letter-spacing: -0.04em; transition: color .16s var(--ease-hover); }
+.r2 .it span { font-family: var(--font-mono); font-size: 13px; }
+.r2 .it:hover b, .r2 .it.on b { color: var(--text); } .r2 .it.on span { color: var(--text2); }
+.r2 .it.tmp b { font-size: 24px; } .r2 .it.tmp span { font-family: var(--font); color: var(--amber); }
+.r2 .new { display: flex; gap: 10px; margin-top: 30px; }
+.r2 .pane { position: sticky; top: 92px; align-self: start; display: flex; flex-direction: column; gap: 22px; }
+.r2 .ph { display: flex; flex-direction: column; gap: 14px; }
+.r2 .ph h2 { margin: 0; font-size: 44px; line-height: 1.05; font-weight: 650; letter-spacing: -0.04em; }
+.r2 .ph .chips, .r2 .chips { display: flex; gap: 8px; flex-wrap: wrap; }
+.r2 .ph .desc { font-size: 15px; color: var(--text2); }
+.r2 .ph .acts { display: flex; gap: 10px; }
+.r2 .blk { display: flex; flex-direction: column; gap: 10px; }
+.r2 .blk h4 { margin: 0; font-size: 13px; font-weight: 500; color: var(--text3); display: flex; gap: 10px; align-items: baseline; }
+.r2 .blk h4 b { color: var(--text2); font-weight: 500; }
+.r2 .pub { display: flex; align-items: baseline; gap: 14px; flex-wrap: wrap; }
+.r2 .pub .pv { font-family: var(--font-mono); font-size: 34px; font-weight: 600; letter-spacing: -0.02em; }
+.r2 .pub .dt { font-size: 13px; color: var(--text3); }
+.r2 .notes { font-size: 14px; color: var(--text2); line-height: 1.65; }
+.r2 .files { display: flex; flex-direction: column; }
+.r2 .f { display: flex; align-items: center; gap: 12px; padding: 10px 0; border-top: 1px solid var(--border); font-size: 14px; }
+.r2 .f:first-child { border-top: 0; }
+.r2 .f .fn { flex: 1; min-width: 0; font-family: var(--font-mono); font-size: 13px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.r2 .f .sz { font-family: var(--font-mono); font-size: 12px; color: var(--text3); white-space: nowrap; }
+.r2 .f .gl { width: 30px; height: 30px; }
+.r2 .f .gl svg { width: 16px; height: 16px; }
+.r2 .f .vv { font-family: var(--font-mono); font-size: 13px; min-width: 64px; }
+.r2 .f .dd { font-size: 12px; color: var(--text3); }
+.r2 .f .lt { font-size: 12px; color: var(--green); }
+/* a 通铺随选中：整页一幅液体，压暗到 25%，左侧再压一道让大字读得清 */
+.r2.a .bg canvas { opacity: .32; } .r2.a .bg::after { background: linear-gradient(90deg, var(--bg) 0%, rgba(12,12,14,.7) 45%, rgba(12,12,14,.35) 100%); }
+/* b 右半随选中：液体只在右半，从左缘溶进夜色，内容直接压在液体上 */
+.r2.b .bg canvas { left: 40%; width: 60%; opacity: .55; } .r2.b .bg::after { background: linear-gradient(90deg, var(--bg) 0%, var(--bg) 42%, rgba(12,12,14,.55) 70%, rgba(12,12,14,.65) 100%); }
+.r2.b .pane { text-shadow: 0 1px 12px rgba(0,0,0,.6); }
+/* c 固定静背景：整页一幅不随选中的静态液体，极暗；内容在实色面板里 */
+.r2.c .bg canvas { opacity: .16; } .r2.c .bg::after { background: linear-gradient(180deg, rgba(12,12,14,0) 0%, var(--bg) 90%); }
+.r2.c .pane { padding: 24px; border-radius: 16px; background: var(--surface); box-shadow: inset 0 0 0 1px var(--border); }
+/* d 玻璃面：整页液体较亮，右侧内容在毛玻璃面里 */
+.r2.d .bg canvas { opacity: .6; } .r2.d .bg::after { background: linear-gradient(90deg, var(--bg) 0%, rgba(12,12,14,.75) 40%, rgba(12,12,14,.2) 100%); }
+.r2.d .pane { padding: 24px; border-radius: 18px; background: rgba(20,20,22,.55); backdrop-filter: blur(24px) saturate(1.2); -webkit-backdrop-filter: blur(24px) saturate(1.2); box-shadow: inset 0 0 0 1px rgba(242,243,245,.1), 0 30px 80px rgba(0,0,0,.4); }
+@container (max-width: 600px) {
+  .r2 .top { padding: 20px 22px; } .r2 .top .sub, .r2 .top .disk { display: none; }
+  .r2 .wrap { grid-template-columns: minmax(0, 1fr); padding: 0 22px 48px; } .r2 .pane { display: none; } .r2 .it b { font-size: 32px; }
+  .r2.b .bg canvas { left: 0; width: 100%; } .r2 .bg::after { background: linear-gradient(180deg, rgba(12,12,14,.3) 0%, var(--bg) 70%) !important; }
+}
+
+/* ================= 第三轮：临时文件放哪（底子 = 第二轮 0 通铺随选中） ================= */
+.r2 .tstrip { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; margin: 0 0 26px; }
+.r2 .tdz { display: inline-flex; align-items: center; gap: 8px; height: 40px; padding: 0 16px; border-radius: 20px; border: 1.5px dashed var(--border-strong); background: none; color: var(--text2); font: inherit; font-size: 13px; cursor: pointer; }
+.r2 .tdz svg { width: 16px; height: 16px; color: var(--amber); }
+.r2 .tdz:hover { border-color: var(--amber); color: var(--text); }
+.r2 .tc { display: inline-flex; align-items: center; gap: 8px; height: 40px; padding: 0 14px; border-radius: 20px; border: 0; background: rgba(255,255,255,.06); color: var(--text); font: inherit; font-size: 13px; font-weight: 600; cursor: pointer; max-width: 260px; }
+.r2 .tc span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.r2 .tc small { flex: none; font-weight: 500; font-size: 12px; color: var(--text3); }
+.r2 .tc small.warn { color: var(--amber); }
+.r2 .tc.on { box-shadow: inset 0 0 0 1px rgba(251,191,36,.55); }
+.r2 .tc .ring { flex: none; width: 14px; height: 14px; border-radius: 9px; background: conic-gradient(var(--amber) var(--p), rgba(255,255,255,.12) 0); }
+.r2 .hubl { display: inline-flex; align-items: baseline; gap: 10px; border: 0; background: none; font: inherit; color: var(--text3); cursor: pointer; padding: 0; margin-bottom: 24px; }
+.r2 .hubl b { font-size: 24px; font-weight: 650; letter-spacing: -0.03em; } .r2 .hubl span { font-size: 13px; color: var(--amber); }
+.r2 .hubl:hover b, .r2 .hubl.on b { color: var(--text); }
+.r2 .hub .dzbig { display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 8px; height: 180px; border-radius: 16px; border: 1.5px dashed var(--border-strong); color: var(--text2); font-size: 14px; }
+.r2 .hub .dzbig svg { width: 26px; height: 26px; color: var(--amber); }
+.r2 .hub .dzbig small { color: var(--text3); font-size: 12px; }
+.r2 .ttl { display: flex; gap: 6px; } .r2 .ttl .pill { cursor: pointer; } .r2 .ttl .pill.on { color: var(--text); background: rgba(255,255,255,.12); }
+.r2 .trs { display: flex; flex-direction: column; }
+.r2 .trs .f .nm { flex: 1; min-width: 0; font-size: 14px; font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.r2 .trs .f .left { font-size: 12px; color: var(--text3); white-space: nowrap; } .r2 .trs .f .left.warn { color: var(--amber); }
+.r2 .tg-top .it.tmp b { font-size: 22px; }
+.r2 .dock { position: sticky; bottom: 20px; z-index: 6; margin: -80px 0 0 6%; width: min(520px, 44%); display: flex; align-items: center; gap: 10px; padding: 10px 10px 10px 16px; border-radius: 26px; background: var(--surface2); box-shadow: inset 0 0 0 1px var(--border-strong), 0 20px 60px rgba(0,0,0,.5); }
+.r2 .dock .dl { font-size: 13px; color: var(--text2); white-space: nowrap; } .r2 .dock .dl b { color: var(--text); }
+.r2 .dock .tc { height: 34px; background: rgba(255,255,255,.07); }
+.r2 .dock .tdz { height: 34px; margin-left: auto; }
+.r2 .layer { position: absolute; right: 70px; top: 76px; z-index: 8; width: 400px; display: flex; flex-direction: column; gap: 12px; padding: 16px; border-radius: 16px; background: var(--surface2); box-shadow: inset 0 0 0 1px var(--border-strong), 0 30px 80px rgba(0,0,0,.55); }
+.r2 .layer h4 { margin: 0; font-size: 14px; font-weight: 650; display: flex; gap: 8px; align-items: baseline; } .r2 .layer h4 small { color: var(--text3); font-weight: 400; font-size: 12px; }
+.r2 .layer .tdz { justify-content: center; border-radius: 12px; height: 56px; }
+.r2 .glon { color: var(--text) !important; background: rgba(255,255,255,.08) !important; }
+.r2 .dropall { position: absolute; inset: 0; z-index: 20; display: none; place-items: center; background: rgba(12,12,14,.72); }
+.r2 .dropall div { display: flex; flex-direction: column; align-items: center; gap: 12px; padding: 48px 80px; border-radius: 24px; border: 2px dashed var(--amber); color: var(--text); font-size: 18px; font-weight: 600; }
+.r2 .dropall svg { width: 34px; height: 34px; color: var(--amber); }
+.r2 .dropall small { font-size: 13px; color: var(--text2); font-weight: 400; }
+.face.dragging .r2 .dropall { display: grid; }
+@container (max-width: 600px) { .r2 .dock { margin: -70px 16px 0; width: auto; } .r2 .dock .tc, .r2 .dock .dl { display: none; } .r2 .dock .tdz { margin-left: 0; flex: 1; justify-content: center; } .r2 .layer { left: 12px; right: 12px; width: auto; } }
+</style>
+</head>
+<body>
+<header class="lab">
+  <div class="lab-top">
+    <h1>总览构图 · 对照版</h1>
+    <div class="pick" id="pick"></div>
+    <span class="lab-sep"></span>
+    <div class="pick" id="spec"></div>
+    <span class="keys"><kbd>数字</kbd> 切档 <kbd>R</kbd> 轮次 <kbd>C</kbd> 对照现状 <kbd>S</kbd> 样本 <kbd>M</kbd> 手机 <kbd>↑↓</kbd> 换库 <kbd>D</kbd> 拖入态</span>
+  </div>
+  <div class="note" id="note"></div>
+</header>
+<main class="stage" id="stage"></main>
+
+<script>
+/* ---- 图标（从 ReleaseHub 现有 svg 抄，线性 1.8） ---- */
+const SV = (d) => `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">${d}</svg>`;
+const I = {
+  up: SV('<path d="M12 16V4M7 9l5-5 5 5"/><path d="M5 16v3a1 1 0 0 0 1 1h12a1 1 0 0 0 1-1v-3"/>'),
+  gear: SV('<circle cx="12" cy="12" r="3"/><path d="M19 12a7 7 0 0 0-.1-1l2-1.5-2-3.5-2.4 1a7 7 0 0 0-1.7-1l-.4-2.5h-4l-.4 2.5a7 7 0 0 0-1.7 1l-2.4-1-2 3.5 2 1.5a7 7 0 0 0 0 2l-2 1.5 2 3.5 2.4-1a7 7 0 0 0 1.7 1l.4 2.5h4l.4-2.5a7 7 0 0 0 1.7-1l2.4 1 2-3.5-2-1.5a7 7 0 0 0 .1-1z"/>'),
+  plus: SV('<path d="M12 5v14M5 12h14"/>'),
+  arrow: SV('<path d="M7 17 17 7M8 7h9v9"/>'),
+  copy: SV('<rect x="9" y="9" width="11" height="11" rx="2"/><path d="M5 15V5a2 2 0 0 1 2-2h10"/>'),
+  down: SV('<path d="M6 9l6 6 6-6"/>'),
+  disk: SV('<rect x="3" y="5" width="18" height="14" rx="3"/><path d="M7 15h.01M11 15h6"/>'),
+};
+
+/* ---- 样本：形状照 /api/apps、/api/resource-libraries、/api/temp-transfer、/api/disk 抄；稀 / 中 / 满 ---- */
+const A = (name, label, repoType, versions, latest, description = '') => ({ kind: 'app', name, label, repoType, versions, latest, description });
+const R = (name, label, items, description = '') => ({ kind: 'resource', name, label, items, description });
+const MID = [
+  A('morii', 'Morii', 'tauri', 21, '1.2.3', '一个真正的好用的日志软件'), A('coffice', 'Coffice', 'general', 3, '0.1.3'), A('rodo', 'IssueCenter', 'tauri', 1, null, '问题簇与修复交接'),
+  A('SJH', '圣健华', 'general', 8, '112'), A('KeroCom', 'Kero企业版', 'general', 3, '2.1.0'), A('Kero', 'Kero', 'general', 4, '2.1.4'),
+  A('knockknock', '叩叩', 'tauri', 5, '0.4.2', '敲一下就到的消息'), A('flashdo', 'FlashDo', 'tauri', 14, '1.0.9'), A('pix', 'PixNote', 'general', 2, '0.2.0'),
+  R('public', '通用资源库', 12, '常用工具合集'), R('fonts', '字体', 6), R('drivers', '驱动镜像', 3), R('design', '设计资源', 9),
+];
+const SPECS = [
+  { from: '稀', note: '只有一个库、还没发版、没有临时文件', libs: [A('morii', 'Morii', 'tauri', 0, null)], temps: [], disk: { used: 12, free: '404 GB' } },
+  { from: '中', note: '线上真实：13 个库、0 个临时文件', libs: MID, temps: [], disk: { used: 72, free: '129 GB' } },
+  { from: '满', note: '13 个库 + 4 个临时文件（含上传中、快到期）+ 磁盘快满', libs: MID, temps: [
+      { name: 'c.txt', left: '剩 2 小时' }, { name: '交付包', left: '剩 6 天', folder: 3 },
+      { name: '项目交付资料_最终版_v3.zip', left: '上传中', prog: 64 }, { name: 'a.txt', left: '剩 4 分钟', warn: true }],
+    disk: { used: 93, free: '32 GB', warn: true } },
+];
+
+/* ---- 液体：同一个库（入口页 liquid.js），一页最多一幅实时，其余静态封面一次批量生成 ---- */
+const HP = window.HP;
+const entry = (l) => ({ name: l.label, description: l.description || '', url: l.kind === 'resource' ? `/r/${l.name}` : `/app/${l.name}` });
+const coverCache = new Map();
+function coverOf(l) {
+  const k = l.kind + l.name;
+  if (!coverCache.has(k)) coverCache.set(k, HP ? HP.covers([entry(l)])[0] : '');
+  return coverCache.get(k);
+}
+let stopLive = () => {};
+function mountLive(face, l) {
+  stopLive(); stopLive = () => {};
+  const cv = face.querySelector('canvas[data-live]');
+  if (!cv || !HP) return;
+  const k = Math.min(devicePixelRatio || 1, 1.5) * 0.6;
+  cv.width = Math.round(cv.clientWidth * k); cv.height = Math.round(cv.clientHeight * k);
+  const L = HP.liquid(cv); if (!L) return;
+  const p = L.params(entry(l));
+  const stop = HP.loop((dt, now) => L.draw(now / 1000, p, p, 0));
+  stopLive = () => { stop(); L.dispose(); };
+}
+
+/* ---- 小件 ---- */
+const kcls = (l) => (l.kind === 'resource' ? 'k-res' : 'k-app');
+const kindLabel = (l) => (l.kind === 'resource' ? '资源库' : l.repoType === 'tauri' ? 'Tauri' : '通用');
+const verText = (l) => (l.kind === 'resource' ? `${l.items} 个文件` : l.latest ? l.latest : '尚未发布');
+const countText = (l) => (l.kind === 'resource' ? `${l.items} 文件` : `${l.versions} 版本`);
+const no = (i) => String(i + 1).padStart(2, '0');
+const img = (l) => `<img src="${coverOf(l)}" alt="">`;
+const brand = '<span class="wm">ooooxo</span><span class="sub">Release Hub</span>';
+const diskText = (s) => `<span class="disk ${s.disk.warn ? 'warn' : ''}">磁盘 ${s.disk.used}% · 剩 ${s.disk.free}</span>`;
+const tempIcon = (s) => `<button class="gl" aria-label="临时文件">${I.up}${s.temps.length ? `<span class="badge">${s.temps.length}</span>` : ''}</button>`;
+const gear = `<button class="gl" aria-label="设置">${I.gear}</button>`;
+const chipsOf = (l) => `<span class="pill k ${kcls(l)}">${kindLabel(l)}</span>${l.kind === 'app' ? `<span class="pill num">${l.latest || '尚未发布'}</span><span class="pill">${l.versions} 个版本</span>` : `<span class="pill">${l.items} 个文件</span>`}`;
+const actsOf = (l) => `<button class="btn btn-primary">管理 ${I.arrow}</button><button class="btn btn-ghost">${I.copy}复制公开页</button>`;
+const tempRows = (s) => s.temps.map((t) => `<div class="trow"><span class="kind k-temp">${t.folder ? `文件夹 · ${t.folder}` : '单文件'}</span><span class="nm">${t.name}</span>${t.prog != null ? `<div class="meter prog"><i style="width:${t.prog}%"></i></div>` : ''}<span class="left" style="${t.warn ? 'color:var(--amber)' : ''}">${t.left}</span></div>`).join('');
+const dropzone = `<div class="dz">${I.up}拖文件 / 文件夹到此，传完就地出分享链</div>`;
+const libRow = (l, i, on) => `<div class="row ${on ? 'on' : ''}" data-sel="${i}"><span class="thumb">${img(l)}</span><span class="info"><span class="nm">${l.label}</span><span class="meta"><span class="kind ${kcls(l)}">${kindLabel(l)}</span><span>${l.name}</span></span></span><span class="ver">${verText(l)}</span></div>`;
+
+/* ---- 档：每档 name / thesis / parts / cost / render(s, sel) ---- */
+const LIST = [
+  { name: '现状', thesis: '侧栏放磁盘与导航，内容区是临时文件格 + 库卡网格', parts: [['导航', '左侧栏'], ['库', '封面卡网格'], ['临时', '首段大格']], cost: '',
+    render: (s) => `<div class="v0"><aside class="rail"><div class="brand">${brand}</div><div class="disk"><span class="sub">剩余</span><b>${s.disk.free}</b><div class="meter ${s.disk.warn ? 'warn' : ''}"><i style="width:${s.disk.used}%"></i></div><span class="sub">${s.disk.used}% 已用</span></div><nav><span>临时文件</span><span>设置</span></nav></aside>
+      <div class="main"><div class="head"><h1>总览</h1><span class="sub">${s.libs.filter((l) => l.kind === 'app').length} 应用 · ${s.libs.filter((l) => l.kind === 'resource').length} 资源库 · ${s.temps.length} 临时文件</span></div>
+      <div class="bar"><h2>临时文件</h2><span class="sub">到期自删</span></div><div class="temps"><div class="dz">${I.up}拖文件 / 文件夹到此</div>${s.temps.map((t) => `<div class="tc">${t.name}<small>${t.left}</small></div>`).join('')}</div>
+      <div class="bar"><h2>所有库</h2><span class="sub">${s.libs.length} 个</span><span class="acts"><button class="btn btn-ghost btn-sm">新建应用</button><button class="btn btn-primary btn-sm">新建资源库</button></span></div>
+      <div class="grid">${s.libs.map((l) => `<div class="tile"><span class="cov">${img(l)}</span><span class="nm">${l.label}<small>${countText(l)}</small></span><span class="sub num" style="font-size:12px">${l.name}</span><div class="ft"><div><span>${l.kind === 'app' ? '最新' : '类型'}</span><b>${l.kind === 'app' ? l.latest || '尚未发布' : '无版本线'}</b></div><span class="pill k ${kcls(l)}">${kindLabel(l)}</span></div></div>`).join('')}</div></div></div>` },
+
+  { name: '单幅舞台', thesis: '和入口页一模一样：一次讲一个库，缩略带切换，其余都收进顶栏图标', parts: [['导航', '顶栏图标'], ['库', '一次一个 + 缩略带'], ['液体', '右 62% 实时'], ['临时', '图标 + 角标'], ['新建', '缩略带末尾 ＋']], cost: '一眼看不到全部库；13 个以上要靠缩略带翻，管理密度最低',
+    live: true,
+    render: (s, sel) => { const l = s.libs[sel]; return `<div class="v1"><div class="top"><span class="brand">${brand}</span>${diskText(s)}${tempIcon(s)}${gear}</div>
+      <div class="art fade-l"><canvas data-live></canvas></div>
+      <div class="side"><div class="count num"><b>${no(sel)}</b> / ${no(s.libs.length - 1)}</div><h1>${l.label}</h1>${l.description ? `<div class="desc">${l.description}</div>` : ''}<div class="chips">${chipsOf(l)}</div><div class="acts">${actsOf(l)}</div></div>
+      <nav class="strip">${s.libs.map((x, i) => `<button class="th ${i === sel ? 'on' : ''}" data-sel="${i}">${img(x)}</button>`).join('')}<button class="th new" aria-label="新建">${I.plus}</button></nav></div>`; } },
+
+  { name: '入口管理页式', thesis: '照入口页的管理页：顶栏一条，左边全部库的行，右边选中那个的液体预览面', parts: [['导航', '顶栏按钮'], ['库', '缩略图行'], ['液体', '右面板 3:2 实时'], ['临时', '列表下一段'], ['磁盘', '面板底']], cost: '右面板和详情页内容重叠；手机上面板收掉',
+    live: true,
+    render: (s, sel) => { const l = s.libs[sel]; return `<div class="v2"><div class="top">${brand}<span class="sub" style="margin-right:auto"></span><button class="btn btn-ghost btn-sm">${I.gear}设置</button><button class="btn btn-ghost btn-sm">新建应用</button><button class="btn btn-primary btn-sm">${I.plus}新建资源库</button></div>
+      <div class="main"><div><div class="sec"><h2>所有库</h2><span class="cnt num">${s.libs.length}</span></div><div class="list">${s.libs.map((x, i) => libRow(x, i, i === sel)).join('')}</div>
+        <div class="temp"><div class="sec"><h2>临时文件</h2><span class="cnt">到期自删</span></div>${dropzone}${tempRows(s)}</div></div>
+      <aside class="panel"><div class="preview"><canvas data-live></canvas></div><h3>${l.label}</h3><div class="chips" style="display:flex;gap:8px;flex-wrap:wrap">${chipsOf(l)}</div>
+        <div class="kv"><div><span>标识</span><b class="num">${l.name}</b></div><div><span>${l.kind === 'app' ? '最新版本' : '文件'}</span><b class="num">${verText(l)}</b></div></div>
+        <div class="acts">${actsOf(l)}</div><div class="disk"><span>磁盘 ${s.disk.used}% · 剩 ${s.disk.free}</span><div class="meter ${s.disk.warn ? 'warn' : ''}"><i style="width:${s.disk.used}%"></i></div></div></aside></div></div>`; } },
+
+  { name: '画廊', thesis: '每个库就是一幅液体：大封面网格，名字压在封面上', parts: [['导航', '顶栏图标'], ['库', '16:10 大封面'], ['临时', '一条横带'], ['新建', '标题行右']], cost: '封面占满卡，版本号等信息只剩一行；13 张图首屏只看到 6 张',
+    render: (s) => `<div class="v3"><div class="top"><span class="brand">${brand}</span>${diskText(s)}${tempIcon(s)}${gear}</div>
+      <div class="main"><div class="hero"><h1>总览</h1><div class="chips"><span class="pill">${s.libs.length} 个库</span>${s.temps.length ? `<span class="pill k k-temp">${s.temps.length} 个临时文件</span>` : ''}</div><div class="acts"><button class="btn btn-ghost">新建应用</button><button class="btn btn-primary">${I.plus}新建资源库</button></div></div>
+      <div class="temps"><div class="dz">${I.up}拖进来出分享链</div>${s.temps.map((t) => `<div class="tchip">${t.name}<small>${t.left}</small></div>`).join('')}</div>
+      <div class="grid">${s.libs.map((l) => `<div class="card"><span class="cov">${img(l)}</span><span class="tl pill k ${kcls(l)}">${kindLabel(l)}</span><div class="cap"><b>${l.label}</b><span class="ver">${verText(l)}</span></div></div>`).join('')}</div></div></div>` },
+
+  { name: '舞台在上', thesis: '首屏上半是一幅大液体压着「总览」大字，下面是行列表', parts: [['导航', '横幅里的顶栏'], ['液体', '全宽横幅'], ['库', '缩略图行'], ['临时', '右列']], cost: '首屏一半是装饰；液体代表的是「总览」不是某个库',
+    live: true,
+    render: (s) => `<div class="v4"><div class="banner"><div class="art fade-b" style="inset:0"><canvas data-live></canvas></div><div class="top"><span class="brand">${brand}</span>${diskText(s)}${gear}</div>
+      <div class="bh"><h1>总览</h1><div class="chips"><span class="pill">${s.libs.length} 个库</span><span class="pill">${s.temps.length} 个临时文件</span></div><div class="acts"><button class="btn btn-ghost">新建应用</button><button class="btn btn-primary">${I.plus}新建资源库</button></div></div></div>
+      <div class="main"><div><div class="sec"><h2>所有库</h2><span class="cnt num">${s.libs.length}</span></div><div class="list">${s.libs.map((x, i) => libRow(x, i, false)).join('')}</div></div>
+      <div class="temp"><div class="sec"><h2>临时文件</h2><span class="cnt">到期自删</span></div>${dropzone}${tempRows(s)}${s.temps.length ? '' : '<p class="empty-note">还没有临时文件</p>'}</div></div></div>` },
+
+  { name: '索引', thesis: '入口页的大字语言做成目录：库名就是大标题，指到哪个右边液体就换成哪个', parts: [['导航', '顶栏图标'], ['库', '大字名单'], ['液体', '右侧粘性大图'], ['新建', '名单末尾']], cost: '只有名字和版本号；手机上没有液体',
+    live: true,
+    render: (s, sel) => { const l = s.libs[sel]; const grp = (k, t) => { const xs = s.libs.map((x, i) => [x, i]).filter(([x]) => x.kind === k); return xs.length ? `<div class="grp">${t}</div>${xs.map(([x, i]) => `<button class="it ${i === sel ? 'on' : ''}" data-sel="${i}"><b>${x.label}</b><span>${verText(x)}</span></button>`).join('')}` : ''; };
+      return `<div class="v5"><div class="top"><span class="brand">${brand}</span>${diskText(s)}${tempIcon(s)}${gear}</div>
+      <div class="wrap"><div class="idx">${grp('app', '应用')}${grp('resource', '资源库')}<div class="new"><button class="btn btn-ghost">${I.plus}新建应用</button><button class="btn btn-ghost">${I.plus}新建资源库</button></div></div>
+      <div class="pane"><div class="pv art fade-l" style="position:relative"><canvas data-live></canvas></div><div class="info"><div class="chips">${chipsOf(l)}</div>${l.description ? `<div class="desc">${l.description}</div>` : ''}<div class="acts">${actsOf(l)}</div></div></div></div></div>`; } },
+
+  { name: '舞台 + 全表', thesis: '首屏就是入口页（一次一个库），往下滚是全部库的行和临时文件——两头都要', parts: [['首屏', '单幅舞台'], ['往下', '两列缩略图行'], ['临时', '右列'], ['新建', '列表标题行']], cost: '页面变长；首屏选中的那个和下面列表要保持同步',
+    live: true,
+    render: (s, sel) => { const l = s.libs[sel]; return `<div class="v6"><div class="stagebox"><div class="top"><span class="brand">${brand}</span>${diskText(s)}${tempIcon(s)}${gear}</div>
+      <div class="art fade-l"><canvas data-live></canvas></div>
+      <div class="side"><div class="count num"><b>${no(sel)}</b> / ${no(s.libs.length - 1)}</div><h1>${l.label}</h1>${l.description ? `<div class="desc">${l.description}</div>` : ''}<div class="chips">${chipsOf(l)}</div><div class="acts">${actsOf(l)}</div></div>
+      <div class="cue">${I.down}全部 ${s.libs.length} 个库${s.temps.length ? ` · ${s.temps.length} 个临时文件` : ''}</div></div>
+      <div class="rest"><div><div class="sec"><h2>所有库</h2><span class="cnt num">${s.libs.length}</span><button class="btn btn-ghost btn-sm">新建应用</button><button class="btn btn-primary btn-sm">${I.plus}新建资源库</button></div><div class="list">${s.libs.map((x, i) => libRow(x, i, i === sel)).join('')}</div></div>
+      <div class="temp"><div class="sec"><h2>临时文件</h2><span class="cnt">到期自删</span></div>${dropzone}${tempRows(s)}${s.temps.length ? '' : '<p class="empty-note">还没有临时文件</p>'}</div></div></div>`; } },
+];
+
+/* ================= 第二轮数据：每个库的内容物（形状照 /api/apps/:name、/api/resource-libraries/:name 抄） ================= */
+const PLAT = ['WIN', 'MAC', 'LINUX'];
+function contentOf(l) {
+  if (l.kind === 'resource') {
+    const names = ['7z2600-x64.exe', 'Clash.Verge_2.4.4_aarch64.dmg', 'QuickLook-4.5.0.msi', 'Pearcleaner.dmg', 'PotPlayerSetup64.exe', 'weasel-0.17.4.0-installer.exe', 'SQLiteStudio-3.4.21.exe', 'Dism++10.1.zip'];
+    return { files: Array.from({ length: Math.min(l.items, 6) }, (_, i) => ({ name: names[i % names.length], size: `${(3 + i * 11.7).toFixed(1)} MB`, ver: i % 3 ? `${i}.${i + 1}.0` : '' })), more: Math.max(0, l.items - 6) };
+  }
+  if (!l.latest) return { none: true };
+  const [ma, mi, pa] = l.latest.split('.').map(Number);
+  const hist = Array.from({ length: Math.min(l.versions, 4) }, (_, i) => ({ v: i === 0 ? l.latest : `${ma}.${mi}.${Math.max(0, (pa || 0) - i)}`.replace('NaN', i), date: `2026-${String(10 - i).padStart(2, '0')}-0${(i * 3) % 9 + 1}`, n: 3 - (i % 2) }));
+  const fn = (p) => `${l.label}_${l.latest}_${p === 'WIN' ? 'x64_zh-CN.msi' : p === 'MAC' ? 'aarch64.dmg' : 'amd64.AppImage'}`;
+  return { date: '2026-10-06', notes: l.description ? `修复若干问题，${l.description}更顺手了。` : '修复若干问题。', files: (l.repoType === 'tauri' ? PLAT : ['WIN']).map((p, i) => ({ plat: p, name: fn(p), size: `${(28 + i * 2.3).toFixed(1)} MB` })), hist, more: Math.max(0, l.versions - 4) };
+}
+const dl = `<button class="gl" aria-label="下载">${SV('<path d="M12 4v12M7 11l5 5 5-5M5 20h14"/>')}</button>`;
+const cp = `<button class="gl" aria-label="复制直链">${I.copy}</button>`;
+function paneOf(s, sel) {
+  if (sel >= s.libs.length) {   // 临时文件
+    const t = s.temps[sel - s.libs.length];
+    return `<div class="ph"><div class="chips"><span class="pill k k-temp">临时文件</span><span class="pill" style="${t.warn ? 'color:var(--amber)' : ''}">${t.left}</span></div><h2>${t.name}</h2>
+      <div class="acts"><button class="btn btn-primary">${I.copy}复制分享链</button><button class="btn btn-ghost">删除</button></div></div>
+      <div class="blk"><h4>${t.folder ? `文件夹 · <b>${t.folder} 个文件</b>` : '单文件'}</h4><div class="files">${(t.folder ? ['设计稿.fig', '说明.pdf', 'assets.zip'] : [t.name]).map((n) => `<div class="f"><span class="fn">${n}</span><span class="sz">12.4 MB</span>${dl}</div>`).join('')}</div></div>`;
+  }
+  const l = s.libs[sel], c = contentOf(l);
+  const head = `<div class="ph"><div class="chips">${chipsOf(l)}</div><h2>${l.label}</h2>${l.description ? `<div class="desc">${l.description}</div>` : ''}<div class="acts">${actsOf(l)}</div></div>`;
+  if (l.kind === 'resource') return head + `<div class="blk"><h4>文件 <b>${l.items}</b></h4><div class="files">${c.files.map((f) => `<div class="f"><span class="fn">${f.name}</span>${f.ver ? `<span class="pill num">${f.ver}</span>` : ''}<span class="sz">${f.size}</span>${cp}${dl}</div>`).join('')}</div>${c.more ? `<span class="sub">还有 ${c.more} 个文件</span>` : ''}</div>`;
+  if (c.none) return head + `<div class="blk"><h4>当前发布</h4><span class="empty-note">还没有发布任何版本。在管理页新建版本、上传安装包后发布。</span></div>`;
+  return head + `<div class="blk"><h4>当前发布</h4><div class="pub"><span class="pv">${l.latest}</span><span class="dt">${c.date}</span></div><div class="notes">${c.notes}</div>
+      <div class="files">${c.files.map((f) => `<div class="f"><span class="pill">${f.plat}</span><span class="fn">${f.name}</span><span class="sz">${f.size}</span>${cp}${dl}</div>`).join('')}</div></div>
+    <div class="blk"><h4>历史版本 <b>${l.versions}</b></h4><div class="files">${c.hist.map((h, i) => `<div class="f"><span class="vv">${h.v}</span>${i === 0 ? '<span class="lt">当前</span>' : ''}<span class="dd" style="margin-left:auto">${h.date}</span><span class="sz">${h.n} 个文件</span></div>`).join('')}</div>${c.more ? `<span class="sub">还有 ${c.more} 个更早的版本</span>` : ''}</div>`;
+}
+function indexOf(s, sel) {
+  const grp = (k, t) => { const xs = s.libs.map((x, i) => [x, i]).filter(([x]) => x.kind === k); return xs.length ? `<div class="grp">${t}</div>${xs.map(([x, i]) => `<button class="it ${i === sel ? 'on' : ''}" data-hsel="${i}"><b>${x.label}</b><span>${verText(x)}</span></button>`).join('')}` : ''; };
+  const tmp = s.temps.length ? `<div class="grp">临时文件</div>${s.temps.map((t, j) => `<button class="it tmp ${s.libs.length + j === sel ? 'on' : ''}" data-hsel="${s.libs.length + j}"><b>${t.name}</b><span>${t.left}</span></button>`).join('')}` : '';
+  return `${grp('app', '应用')}${grp('resource', '资源库')}${tmp}<div class="new"><button class="btn btn-ghost">${I.plus}新建应用</button><button class="btn btn-ghost">${I.plus}新建资源库</button><button class="btn btn-ghost">${I.up}传临时文件</button></div>`;
+}
+const r2 = (cls) => (s, sel) => `<div class="r2 ${cls}"><div class="bg"><canvas data-bg></canvas></div><div class="fg"><div class="top"><span class="brand">${brand}</span>${diskText(s)}${gear}</div>
+  <div class="wrap"><div class="idx">${indexOf(s, sel)}</div><aside class="pane">${paneOf(s, sel)}</aside></div></div></div>`;
+const LIST2 = [
+  { name: '通铺随选中', thesis: '整页一幅液体，压暗成背景；指到哪个库，整页的液体就流向哪个', parts: [['背景', '整页 · 随选中'], ['亮度', '压暗到三成'], ['内容', '直接压在背景上']], cost: '换库时整页都在流，动静最大', bg: 'follow', render: r2('a') },
+  { name: '右半随选中', thesis: '液体只在右半、从左缘溶进夜色（入口页的位置），内容就叠在液体上', parts: [['背景', '右半 · 随选中'], ['亮度', '压暗到一半'], ['内容', '叠在液体上 + 字影']], cost: '亮的液体处字要靠阴影撑，最亮的帧会吵', bg: 'follow', render: r2('b') },
+  { name: '固定静背景', thesis: '整页一幅很暗、不随选中的液体当底；内容在实色面板里，最安静', parts: [['背景', '整页 · 固定'], ['亮度', '一成半'], ['内容', '实色面板']], cost: '液体和库没有关系了，入口页「一库一液」的联系断掉', bg: 'fixed', render: r2('c') },
+  { name: '玻璃面', thesis: '整页液体亮一些，右侧内容在毛玻璃面里，液体透过玻璃还看得见', parts: [['背景', '整页 · 随选中'], ['亮度', '六成'], ['内容', '毛玻璃面']], cost: 'backdrop-filter 吃 GPU，老手机会卡；Safari 未验', bg: 'follow', render: r2('d') },
+];
+
+
+/* ================= 第三轮：临时文件放哪 ================= */
+const pct = (t) => (t.prog != null ? t.prog : t.warn ? 8 : /小时/.test(t.left) ? 40 : 85);
+const tchip = (s, t, j, sel) => `<button class="tc ${s.libs.length + j === sel ? 'on' : ''}" data-hsel="${s.libs.length + j}"><i class="ring" style="--p:${pct(t)}%"></i><span>${t.name}</span><small class="${t.warn ? 'warn' : ''}">${t.left}</small></button>`;
+const tdz = (label = '拖文件到这里 / 选文件') => `<button class="tdz">${I.up}${label}</button>`;
+function libsIdx(s, sel, newTemp = false) {
+  const grp = (k, t) => { const xs = s.libs.map((x, i) => [x, i]).filter(([x]) => x.kind === k); return xs.length ? `<div class="grp">${t}</div>${xs.map(([x, i]) => `<button class="it ${i === sel ? 'on' : ''}" data-hsel="${i}"><b>${x.label}</b><span>${verText(x)}</span></button>`).join('')}` : ''; };
+  return `${grp('app', '应用')}${grp('resource', '资源库')}<div class="new"><button class="btn btn-ghost">${I.plus}新建应用</button><button class="btn btn-ghost">${I.plus}新建资源库</button>${newTemp ? `<button class="btn btn-ghost">${I.up}传临时文件</button>` : ''}</div>`;
+}
+const TTL = ['30m', '1h', '3h', '6h', '12h', '1d'];
+function hubPane(s, sel) {
+  return `<div class="hub" style="display:flex;flex-direction:column;gap:22px"><div class="ph"><div class="chips"><span class="pill k k-temp">临时文件</span><span class="pill">到期自删</span></div><h2>临时文件</h2></div>
+    <div class="dzbig">${I.up}拖文件 / 文件夹到此<small>传完就地出分享链 · 也可以拖到页面任何地方</small></div>
+    <div class="ttl">${TTL.map((x) => `<span class="pill num ${x === '1d' ? 'on' : ''}">${x}</span>`).join('')}</div>
+    <div class="blk"><h4>进行中 <b>${s.temps.length}</b></h4>${s.temps.length ? `<div class="trs">${s.temps.map((t, j) => `<div class="f" data-hsel="${s.libs.length + j}" style="cursor:pointer"><span class="kind k-temp">${t.folder ? '文件夹' : '单文件'}</span><span class="nm">${t.name}</span><span class="left ${t.warn ? 'warn' : ''}">${t.left}</span>${cp}</div>`).join('')}</div>` : '<span class="empty-note">还没有临时文件。</span>'}</div></div>`;
+}
+const paneR3 = (s, sel) => (sel === -1 ? hubPane(s, sel) : paneOf(s, sel));
+const shell3 = (s, sel, { idxTop = '', idx, after = '', topExtra = '', glOn = false }) => `<div class="r2 a"><div class="bg"><canvas data-bg></canvas></div><div class="fg"><div class="top"><span class="brand">${brand}</span>${diskText(s)}${topExtra}${gear}</div>
+  <div class="wrap"><div class="idx">${idxTop}${idx}</div><aside class="pane">${paneR3(s, sel)}</aside></div>${after}</div>
+  <div class="dropall"><div>${I.up}松手就传成临时文件<small>默认 1 天后自动删除 · 传完自动复制分享链</small></div></div></div>`;
+const LIST3 = [
+  { name: '索引末尾（第二轮）', thesis: '第二轮的做法：临时文件是名单的最后一组', parts: [['位置', '名单最后'], ['上传', '名单末尾按钮']], cost: '要滚过 13 个库才看得到；快到期的最容易被漏',
+    bg: 'follow', render: (s, sel) => shell3(s, sel, { idx: indexOf(s, sel) }) },
+  { name: '顶部一条', thesis: '临时文件是名单上方的一条胶囊带：拖放入口 + 每个在传 / 在用的一枚，带剩余时间环', parts: [['位置', '名单顶上一条'], ['单个', '胶囊 + 剩余环'], ['上传', '带头的虚线胶囊']], cost: '多于 5 个会折行把名单往下推',
+    bg: 'follow', render: (s, sel) => shell3(s, sel, { idxTop: `<div class="tstrip">${tdz()}${s.temps.map((t, j) => tchip(s, t, j, sel)).join('')}</div>`, idx: libsIdx(s, sel) }) },
+  { name: '右侧默认态', thesis: '没指着库的时候，右侧就是临时文件中心（大投放区 + 有效期 + 列表）；名单顶上一个「临时文件」回到这里', parts: [['位置', '右侧默认'], ['上传', '大投放区'], ['回来', '名单顶链接']], cost: '指着库时临时文件整个看不见；靠「回到默认」的心智',
+    bg: 'follow', hub: true, render: (s, sel) => shell3(s, sel, { idxTop: `<button class="hubl ${sel === -1 ? 'on' : ''}" data-hsel="-1"><b>临时文件</b><span>${s.temps.length ? `${s.temps.length} 个在用${s.temps.some((t) => t.warn) ? ' · 1 个快到期' : ''}` : '拖进来出分享链'}</span></button>`, idx: libsIdx(s, sel) }) },
+  { name: '底部坞', thesis: '左下一枚常驻的坞：投放入口 + 最近的几个临时文件，滚到哪都在', parts: [['位置', '左下常驻坞'], ['单个', '最多 2 枚 + 计数'], ['上传', '坞内按钮']], cost: '压住名单最后一屏；坞里只放得下两三个',
+    bg: 'follow', render: (s, sel) => shell3(s, sel, { idx: libsIdx(s, sel), after: `<div class="dock"><span class="dl">临时文件 <b>${s.temps.length}</b></span>${s.temps.slice(0, 2).map((t, j) => tchip(s, t, j, sel)).join('')}${tdz(mobile ? '传临时文件' : '拖到这里')}</div>` }) },
+  { name: '顶栏浮层 + 整页拖放', thesis: '平时只是顶栏一个带角标的图标，点开是浮层；上传不找入口：文件拖到页面任何地方都接（按 D 看拖进来的样子）', parts: [['位置', '顶栏图标 → 浮层'], ['上传', '整页拖放'], ['提醒', '角标 / 快到期变琥珀']], cost: '临时文件平时看不见内容；拖放之外的入口藏一层',
+    bg: 'follow', layer: true, render: (s, sel) => shell3(s, sel, { idx: libsIdx(s, sel), glOn: true,
+      topExtra: `<button class="gl ${layerOpen ? 'glon' : ''}" data-layer aria-label="临时文件" style="${s.temps.some((t) => t.warn) ? 'color:var(--amber)' : ''}">${I.up}${s.temps.length ? `<span class="badge">${s.temps.length}</span>` : ''}</button>`,
+      after: layerOpen ? `<div class="layer"><h4>临时文件 <small>到期自删 · 也可以直接把文件拖进页面</small></h4>${tdz('选文件 / 文件夹')}<div class="ttl">${TTL.map((x) => `<span class="pill num ${x === '1d' ? 'on' : ''}">${x}</span>`).join('')}</div>${s.temps.length ? `<div class="trs">${s.temps.map((t, j) => `<div class="f" data-hsel="${s.libs.length + j}" style="cursor:pointer"><span class="nm">${t.name}</span><span class="left ${t.warn ? 'warn' : ''}">${t.left}</span>${cp}</div>`).join('')}</div>` : '<span class="empty-note">还没有临时文件</span>'}</div>` : '' }) },
+];
+let layerOpen = true;
+/* ---- 背景液体：一幅实时，换库时按入口页的做法从 A 流到 B（in-out，1.2s） ---- */
+let bgLive = null;
+function mountBg(face, l, fixed) {
+  stopLive(); stopLive = () => {}; bgLive = null;
+  const cv = face.querySelector('canvas[data-bg]'); if (!cv || !HP) return;
+  const k = Math.min(devicePixelRatio || 1, 1.5) * 0.45;
+  cv.width = Math.round(cv.clientWidth * k); cv.height = Math.round(cv.clientHeight * k);
+  const L = HP.liquid(cv); if (!L) return;
+  const P = fixed ? L.params({ name: 'Release Hub', description: '', url: '', motif: 'flow' }) : L.params(entry(l));
+  bgLive = { L, A: P, B: P, t0: 0, fixed };
+  const stop = HP.loop((dt, now) => { const b = bgLive; let m = 0;
+    if (b.t0) { const t = Math.min(1, (now - b.t0) / 1200); m = HP.EASE_IN_OUT(t); if (t >= 1) { b.A = b.B; b.t0 = 0; m = 0; } }
+    L.draw(now / 1000, b.A, b.B, m); });
+  stopLive = () => { stop(); L.dispose(); };
+}
+function flowBg(l) { if (!bgLive || bgLive.fixed || !l) return; if (bgLive.t0) bgLive.A = bgLive.B; bgLive.B = bgLive.L.params(entry(l)); bgLive.t0 = performance.now(); }
+
+/* ---- 渲染与键位 ---- */
+const ROUNDS = [{ name: '第一轮', list: LIST }, { name: '第二轮 · 索引 + 内容', list: LIST2 }, { name: '第三轮 · 临时文件放哪', list: LIST3 }];
+const KEY = 'lab.rh-home.';
+let round = Number(localStorage.getItem(KEY + 'r') ?? 1);
+const cur = [Number(localStorage.getItem(KEY + 'v0') ?? 6), Number(localStorage.getItem(KEY + 'v1') ?? 0), Number(localStorage.getItem(KEY + 'v2') ?? 1)];
+let si = Number(localStorage.getItem(KEY + 's') ?? 1), mobile = localStorage.getItem(KEY + 'm') === '1', showCur = false, sel = 0;
+const stage = document.getElementById('stage');
+function render() {
+  const list = ROUNDS[round].list, d = showCur ? LIST[0] : list[cur[round]], s = SPECS[si];
+  if (sel >= s.libs.length + (round ? s.temps.length : 0) || (sel === -1 && !d.hub)) sel = 0;
+  document.documentElement.style.setProperty('--face-w', mobile ? '390px' : '1440px');
+  document.documentElement.style.setProperty('--face-h', mobile ? '844px' : '860px');
+  stage.innerHTML = `<article class="face">${d.render(s, sel)}</article>`;
+  document.getElementById('pick').innerHTML = ROUNDS.map((r, i) => `<button data-r="${i}" aria-pressed="${i === round}">${r.name}</button>`).join('') + '<span class="lab-sep"></span>' +
+    list.map((x, i) => `<button data-v="${i}" aria-pressed="${!showCur && i === cur[round]}"><b>${i}</b>${x.name}</button>`).join('');
+  document.getElementById('spec').innerHTML = SPECS.map((x, i) => `<button data-s="${i}" aria-pressed="${i === si}" title="${x.note}">${x.from}</button>`).join('') + `<button data-m aria-pressed="${mobile}">手机</button>`;
+  document.getElementById('note').innerHTML = `<span class="thesis">${d.thesis}</span>${d.parts.map(([k, t]) => `<span class="part"><i>${k}</i>${t}</span>`).join('')}${d.cost ? `<span class="cost">${d.cost}</span>` : ''}<span class="part"><i>样本</i>${s.note}</span>`;
+  const face = stage.querySelector('.face');
+  requestAnimationFrame(() => { if (d.bg) mountBg(face, s.libs[Math.max(0, Math.min(sel, s.libs.length - 1))], d.bg === 'fixed'); else if (d.live) mountLive(face, s.libs[sel]); else stopLive(); });
+}
+/* 第二轮换选中：只换右侧内容与名单高亮，背景液体流过去，不重画整页 */
+function select(i) {
+  if (i === sel) return; sel = i;
+  const face = stage.querySelector('.face'), s = SPECS[si];
+  face.querySelector('.pane').innerHTML = round === 2 ? paneR3(s, sel) : paneOf(s, sel);
+  face.querySelectorAll('[data-hsel]').forEach((b) => b.classList.toggle('on', Number(b.dataset.hsel) === sel));
+  if (sel >= 0 && sel < s.libs.length) flowBg(s.libs[sel]);
+}
+const save = () => { localStorage.setItem(KEY + 'r', round); cur.forEach((x, i) => localStorage.setItem(KEY + 'v' + i, x)); localStorage.setItem(KEY + 's', si); localStorage.setItem(KEY + 'm', mobile ? '1' : '0'); };
+let hoverT;
+document.addEventListener('mouseover', (e) => { const b = e.target.closest('[data-hsel]'); if (!b) return; clearTimeout(hoverT); hoverT = setTimeout(() => select(Number(b.dataset.hsel)), 70); });
+document.addEventListener('click', (e) => {
+  const b = e.target.closest('[data-r],[data-v],[data-s],[data-m],[data-sel],[data-hsel],[data-layer]'); if (!b) return;
+  if (b.dataset.hsel != null) return select(Number(b.dataset.hsel));
+  if (b.hasAttribute('data-layer')) { layerOpen = !layerOpen; return render(); }
+  if (b.dataset.r != null) { round = Number(b.dataset.r); showCur = false; sel = 0; }
+  else if (b.dataset.v != null) { cur[round] = Number(b.dataset.v); showCur = false; sel = ROUNDS[round].list[cur[round]].hub ? -1 : 0; }
+  else if (b.dataset.s != null) si = Number(b.dataset.s);
+  else if (b.hasAttribute('data-m')) mobile = !mobile;
+  else sel = Number(b.dataset.sel);
+  save(); render();
+});
+addEventListener('keydown', (e) => {
+  const list = ROUNDS[round].list, n = SPECS[si].libs.length + (round ? SPECS[si].temps.length : 0);
+  if (/^[0-9]$/.test(e.key) && Number(e.key) < list.length) { cur[round] = Number(e.key); showCur = false; sel = list[cur[round]].hub ? -1 : 0; }
+  else if (e.key.toLowerCase() === 'd') { stage.querySelector('.face')?.classList.toggle('dragging'); return; }
+  else if (e.key.toLowerCase() === 'c') showCur = !showCur;
+  else if (e.key.toLowerCase() === 'r') { round = (round + 1) % ROUNDS.length; sel = 0; }
+  else if (e.key.toLowerCase() === 's') si = (si + 1) % SPECS.length;
+  else if (e.key.toLowerCase() === 'm') mobile = !mobile;
+  else if (e.key === 'ArrowDown' || e.key === 'ArrowRight') { if (round) return select((sel + 1) % n); sel = (sel + 1) % n; }
+  else if (e.key === 'ArrowUp' || e.key === 'ArrowLeft') { if (round) return select((sel - 1 + n) % n); sel = (sel - 1 + n) % n; }
+  else return;
+  save(); render();
+});
+if (!HP) console.error('liquid.js 没取到（需要联网）：液体不渲染');
+render();
+</script>
+</body>
+</html>

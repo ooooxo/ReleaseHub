@@ -2,7 +2,7 @@
   <ToastStack />
   <div class="app-root" :class="{ 'app-root--shelled': shelled }">
     <div v-if="shelled" class="app-shelled-wrap">
-      <ServerStatusStrip v-if="showServerStrip" />
+      <TopBar v-if="showTopBar" />
       <UploadTray />
       <main class="app-main">
         <router-view v-slot="{ Component }">
@@ -27,12 +27,12 @@ import { computed } from 'vue';
 import { useRoute } from 'vue-router';
 import { useAuthStore } from '@/stores/auth';
 import ToastStack from '@/components/ToastStack.vue';
-import ServerStatusStrip from '@/components/ServerStatusStrip.vue';
+import TopBar from '@/components/TopBar.vue';
 import UploadTray from '@/components/UploadTray.vue';
 
 const route = useRoute();
 const auth = useAuthStore();
-const showServerStrip = computed(() => !!auth.token && route.name !== 'login');
+const showTopBar = computed(() => !!auth.token && route.name !== 'login');
 // 只看路由不看 token：登出那一刻不能先把当前页重挂一遍（会再打一轮 401）
 const shelled = computed(() => !!route.meta.requiresAuth);
 </script>
@@ -47,25 +47,18 @@ const shelled = computed(() => !!route.meta.requiresAuth);
 }
 .app-shelled-wrap {
   display: flex;
+  flex-direction: column;
   flex: 1;
   min-height: 0;
   width: 100%;
-  align-items: stretch;
 }
 .app-main {
   flex: 1;
   min-width: 0;
   min-height: 0;
-  overflow: auto;
 }
 .app-main--auth {
   width: 100%;
-}
-
-@media (max-width: 768px) {
-  .app-shelled-wrap {
-    flex-direction: column;
-  }
 }
 
 .fade-enter-active,

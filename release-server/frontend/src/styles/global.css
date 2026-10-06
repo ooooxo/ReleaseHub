@@ -93,6 +93,12 @@ a {
   color: var(--accent);
 }
 
+/* 数字 / 版本号 / 大小：等宽对齐 */
+.num {
+  font-family: var(--font-mono);
+  font-variant-numeric: tabular-nums;
+}
+
 .btn {
   display: inline-flex;
   align-items: center;
