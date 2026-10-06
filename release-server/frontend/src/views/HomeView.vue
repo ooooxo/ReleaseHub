@@ -101,7 +101,9 @@
         </div>
         <p v-else class="temp-off">本服务器未启用临时文件（TEMP_TRANSFER_ENABLED）</p>
 
-        <template v-for="g in groups" :key="g.label">
+        <!-- 应用与资源库并列两列；放不下两列时自动退成一列 -->
+        <div class="groups">
+        <section v-for="g in groups" :key="g.label" class="g">
           <div class="grp">{{ g.label }}</div>
           <button
             v-for="it in g.items"
@@ -117,7 +119,8 @@
             <b>{{ it.displayLabel || it.name }}</b>
             <span class="num">{{ it.kind === 'app' ? it.latestVersion || '尚未发布' : `${it.itemCount} 个文件` }}</span>
           </button>
-        </template>
+        </section>
+        </div>
         <p v-if="!allItems.length" class="empty">还没有库。右上角「新建」一个应用或资源库。</p>
       </nav>
 
@@ -478,8 +481,6 @@ onUnmounted(() => {
   display: grid;
   grid-template-columns: minmax(0, 1fr) minmax(0, 1.05fr);
   gap: 56px;
-  max-width: 1480px;
-  margin: 0 auto;
   padding: 12px 40px 72px 6%;
 }
 
@@ -637,14 +638,24 @@ onUnmounted(() => {
   font-size: 13px;
   color: var(--text3);
 }
+/* 两列按内容自然宽度并排，放不下就整列换到下面——名字不折行 */
+.groups {
+  align-self: stretch;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-start;
+  gap: 30px 64px;
+}
+.g {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  max-width: 100%;
+}
 .grp {
-  margin: 30px 0 6px;
+  margin: 0 0 6px;
   font-size: 13px;
   color: var(--text3);
-}
-.tstrip + .grp,
-.temp-off + .grp {
-  margin-top: 0;
 }
 .it {
   display: flex;
@@ -659,12 +670,18 @@ onUnmounted(() => {
   color: var(--text3);
   cursor: pointer;
 }
+.it {
+  min-width: 0;
+}
 .it b {
-  font-size: 40px;
+  font-size: clamp(28px, 2.5vw, 40px);
   line-height: 1.1;
   font-weight: 650;
   letter-spacing: -0.04em;
-  overflow-wrap: anywhere;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  min-width: 0;
   transition: color var(--t-fast) var(--ease-hover);
 }
 .it span {
@@ -801,6 +818,9 @@ onUnmounted(() => {
   }
   .pane {
     display: none;
+  }
+  .groups {
+    flex-direction: column;
   }
   .it b {
     font-size: 32px;
