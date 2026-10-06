@@ -195,24 +195,7 @@ a {
   box-shadow: inset 0 0 0 1px rgba(56, 189, 248, 0.55), 0 0 0 3px rgba(56, 189, 248, 0.14);
 }
 
-.card {
-  background: var(--surface);
-  border: 1px solid var(--border);
-  border-radius: var(--radius);
-  overflow: hidden;
-}
-
 /* 卡内边距修饰（与 .card 组合用：.card.block）；详情/设置等多视图复用 */
-.block {
-  padding: 22px;
-  margin-bottom: 16px;
-}
-
-.layout-max {
-  max-width: 1100px;
-  margin: 0 auto;
-  padding: 28px 20px 48px;
-}
 
 .slide-up-enter-active,
 .slide-up-leave-active {
@@ -255,107 +238,6 @@ a {
   flex: 1;
 }
 
-/* 分区栏 */
-.section-bar {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 12px;
-  margin: 26px 0 12px;
-}
-.section-bar .sb-l {
-  display: flex;
-  align-items: baseline;
-  gap: 10px;
-}
-.section-bar h2 {
-  margin: 0;
-  font-size: 20px;
-  font-weight: 650;
-  letter-spacing: -0.02em;
-}
-.sb-count {
-  font-size: 0.74rem;
-  color: var(--text3);
-  font-family: var(--font-mono);
-}
-.sb-actions {
-  display: flex;
-  gap: 8px;
-  flex-wrap: wrap;
-}
-
-/* 顶栏 */
-.appbar {
-  display: flex;
-  align-items: flex-start;
-  gap: 14px;
-  margin-bottom: 22px;
-}
-.appbar .back {
-  flex: none;
-  width: 40px;
-  height: 40px;
-  border-radius: 20px;
-  background: rgba(255, 255, 255, 0.05);
-  border: 0;
-  box-shadow: inset 0 0 0 1px var(--border);
-  color: var(--text2);
-  display: grid;
-  place-items: center;
-  cursor: pointer;
-}
-.appbar .back:hover {
-  color: var(--text);
-  box-shadow: inset 0 0 0 1px var(--border-strong);
-}
-.appbar .back svg {
-  width: 18px;
-  height: 18px;
-}
-.appbar .ab-cover {
-  flex: none;
-  width: 78px;
-  height: 52px;
-  border-radius: 7px;
-  overflow: hidden;
-  background: var(--inset);
-}
-.appbar .ab-cover img {
-  width: 100%;
-  height: 100%;
-  object-fit: cover;
-  display: block;
-}
-.appbar .ab-titles {
-  flex: 1;
-  min-width: 0;
-}
-.appbar h1 {
-  margin: 0;
-  font-size: 30px;
-  line-height: 1.15;
-  font-weight: 650;
-  letter-spacing: -0.035em;
-  display: flex;
-  align-items: center;
-  gap: 11px;
-  flex-wrap: wrap;
-}
-.appbar .pkg {
-  font-family: var(--font-mono);
-  font-size: 12px;
-  color: var(--text3);
-  margin-top: 6px;
-  display: inline-block;
-}
-.appbar .ab-actions {
-  display: flex;
-  gap: 8px;
-  flex-wrap: wrap;
-  justify-content: flex-end;
-}
-
 /* 胶囊 */
 .chip {
   font-size: 12px;
@@ -372,26 +254,6 @@ a {
 .chip.resource { color: var(--green); background: var(--green-tint); }
 .chip.temp { color: var(--amber); background: var(--amber-tint); }
 
-/* bento + 卡 */
-.bento {
-  display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(245px, 1fr));
-  gap: 13px;
-  align-content: start;
-}
-.ico {
-  width: 38px;
-  height: 38px;
-  border-radius: 11px;
-  background: var(--accent-tint);
-  color: var(--accent);
-  display: grid;
-  place-items: center;
-  flex: none;
-}
-.ico svg { width: 20px; height: 20px; }
-.ico.is-indigo { background: var(--indigo-tint); color: var(--indigo); }
-.ico.is-green { background: var(--green-tint); color: var(--green); }
 /* 投放区 */
 .dropzone {
   width: 100%;
@@ -417,21 +279,6 @@ a {
   background: var(--accent-tint);
   color: var(--accent);
 }
-.dz-ico {
-  width: 34px;
-  height: 34px;
-  margin-bottom: 9px;
-  color: var(--accent);
-  opacity: 0.85;
-}
-.dz-strong {
-  display: block;
-  color: var(--text);
-  font-weight: 600;
-  margin-bottom: 3px;
-}
-.dropzone:hover .dz-strong,
-.dropzone.drag .dz-strong { color: var(--accent); }
 
 /* 键值表 */
 .kv { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; }
@@ -477,27 +324,8 @@ a {
 .prog-fill { height: 100%; background: var(--accent); border-radius: 99px; }
 .prog-txt { font-size: 0.74rem; color: var(--text2); font-family: var(--font-mono); flex: none; }
 
-/* 版本卡 两态 */
-.vlist { display: flex; flex-direction: column; gap: 9px; }
-.vcard {
-  background: var(--surface);
-  border: 1px solid var(--border);
-  border-radius: var(--radius);
-  transition: border-color var(--t-fast) var(--ease-hover);
-}
-.vcard.open { border-color: var(--border-strong); }
-.vhead { display: flex; align-items: center; gap: 13px; padding: 14px 16px; cursor: pointer; user-select: none; border-radius: var(--radius); }
-.vcard.open .vhead { border-radius: var(--radius) var(--radius) 0 0; }
-.vhead:hover { background: var(--surface2); }
-.vnum { font-family: var(--font-mono); font-size: 1rem; font-weight: 600; color: var(--text); flex: none; min-width: 64px; }
+/* 版本的文件列表与动作 */
 .latest { font-size: 12px; font-weight: 500; color: var(--green); background: var(--green-tint); padding: 3px 9px; border-radius: 999px; flex: none; }
-.vplats { display: flex; gap: 5px; flex: 1; flex-wrap: wrap; }
-.vchip { font-size: 12px; font-weight: 500; color: var(--text2); background: rgba(255, 255, 255, 0.06); padding: 2px 9px; border-radius: 99px; }
-.vfiles-n { font-size: 0.72rem; color: var(--text3); font-family: var(--font-mono); flex: none; }
-.chev { flex: none; width: 16px; height: 16px; color: var(--text3); transition: transform var(--t-med) var(--ease-out); }
-.vcard.open .chev, .adv.open .chev { transform: rotate(180deg); }
-.vbody { border-top: 1px solid var(--border); }
-.vbody-inner { padding: 15px 16px 16px; display: flex; flex-direction: column; gap: 14px; }
 .dropmini { border: 1.4px dashed var(--border-strong); border-radius: var(--radius-sm); padding: 18px; text-align: center; color: var(--text2); font-size: 0.8rem; cursor: pointer; transition: border-color var(--t-fast) var(--ease-hover), color var(--t-fast) var(--ease-hover), background var(--t-fast) var(--ease-hover); }
 .dropmini:hover { border-color: var(--accent); color: var(--accent); background: var(--accent-tint); }
 .dropmini b { color: var(--text); display: block; font-weight: 600; margin-bottom: 3px; }
@@ -513,32 +341,16 @@ a {
 .fdel:hover { color: var(--danger); background: var(--danger-tint); }
 .vactions { display: flex; gap: 8px; flex-wrap: wrap; padding-top: 3px; }
 
-/* 高级折叠 */
-.adv { margin-top: 28px; background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius); }
-.adv-head { display: flex; align-items: center; gap: 11px; width: 100%; padding: 15px 17px; cursor: pointer; user-select: none; border: 0; border-radius: var(--radius); background: none; color: inherit; font: inherit; text-align: left; }
-.adv-head:focus-visible { outline: 2px solid rgba(56, 189, 248, 0.6); outline-offset: -2px; border-radius: var(--radius); }
-.adv-head:hover { background: var(--surface2); }
-.adv.open .adv-head { border-radius: var(--radius) var(--radius) 0 0; }
-.adv-ico { flex: none; width: 30px; height: 30px; border-radius: 9px; background: var(--inset); color: var(--text2); display: grid; place-items: center; }
-.adv-ico svg { width: 16px; height: 16px; }
-.adv-t { flex: 1; }
-.adv-t b { display: block; font-size: 0.92rem; font-weight: 650; }
-.adv-t small { display: block; margin-top: 2px; font-size: 0.72rem; color: var(--text3); }
-.adv-body { display: none; padding: 4px 17px 18px; flex-direction: column; gap: 16px; }
-.adv.open .adv-body { display: flex; }
+/* 高级 / 危险 */
 .code-ta { font-family: var(--font-mono); font-size: 0.74rem; min-height: 120px; color: var(--text2); }
 .danger-zone { border: 1px solid var(--danger-tint); border-radius: var(--radius-sm); padding: 13px 14px; display: flex; align-items: center; justify-content: space-between; gap: 12px; flex-wrap: wrap; }
 .danger-zone .dz-t { font-size: 0.78rem; color: var(--text2); }
 .danger-zone .dz-t b { color: var(--danger); }
 
-/* 发布 hero */
-.published { background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius); padding: 20px; margin-bottom: 14px; display: flex; gap: 22px; flex-wrap: wrap; align-items: center; }
-.pub-main { flex: 1; min-width: 220px; }
+/* 当前发布 */
 .pub-label { font-size: 12px; font-weight: 600; color: var(--green); display: inline-flex; align-items: center; gap: 6px; margin-bottom: 9px; }
 .pub-label::before { content: ''; width: 7px; height: 7px; border-radius: 99px; background: var(--green); box-shadow: 0 0 8px var(--green); }
-.pub-ver { font-family: var(--font-mono); font-size: 2.1rem; font-weight: 600; letter-spacing: -0.02em; line-height: 1; }
 .pub-meta { font-size: 0.78rem; color: var(--text2); margin-top: 9px; }
-.pub-actions { display: flex; flex-direction: column; gap: 8px; min-width: 170px; }
 
 /* 大倒计时环 */
 .bigring { width: 150px; height: 150px; position: relative; flex: none; }
@@ -589,4 +401,195 @@ a {
 .check-draw path {
   stroke-dasharray: 24;
   animation: check-draw var(--t-slow) var(--ease-out) both;
+}
+
+/* ============================================================
+   索引布局（ADR-0007）：总览与各详情页共用——左侧大字索引，右侧选中项的内容，整页液体当底。
+   页面只摆内容；背景液体用 <LiquidBackdrop>，它渲染 .ix-bg。
+   ============================================================ */
+.ix-bg {
+  position: fixed;
+  inset: 0;
+  z-index: 0;
+  pointer-events: none;
+}
+.ix-bg canvas {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  display: block;
+  opacity: 0.32;
+}
+/* 左侧再压一道，让大字索引读得清 */
+.ix-bg::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(90deg, var(--bg) 0%, rgba(12, 12, 14, 0.7) 45%, rgba(12, 12, 14, 0.35) 100%);
+}
+.ix-wrap {
+  position: relative;
+  z-index: 1;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1.05fr);
+  gap: 56px;
+  padding: 12px 40px 72px 6%;
+}
+.ix-idx {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  min-width: 0;
+}
+.ix-grp {
+  margin: 0 0 6px;
+  font-size: 13px;
+  color: var(--text3);
+}
+/* 索引项：名字是大字，未选中退到三级墨，指上去 / 选中回到一级墨 */
+.ix-it {
+  display: flex;
+  align-items: baseline;
+  gap: 14px;
+  max-width: 100%;
+  min-width: 0;
+  padding: 5px 0;
+  border: 0;
+  background: none;
+  text-align: left;
+  font: inherit;
+  color: var(--text3);
+  cursor: pointer;
+  text-decoration: none;
+}
+.ix-it b {
+  min-width: 0;
+  font-size: clamp(28px, 2.5vw, 40px);
+  line-height: 1.1;
+  font-weight: 650;
+  letter-spacing: -0.04em;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  transition: color var(--t-fast) var(--ease-hover);
+}
+.ix-it span {
+  flex: none;
+  font-size: 13px;
+  transition: color var(--t-fast) var(--ease-hover);
+}
+.ix-it:hover b,
+.ix-it.on b,
+.ix-it:focus-visible b {
+  color: var(--text);
+}
+.ix-it.on span {
+  color: var(--text2);
+}
+.ix-it:focus-visible {
+  outline: none;
+}
+/* 小一号的索引项：设置类条目、版本号这类不需要 40px 的 */
+.ix-it.sm b {
+  font-size: clamp(20px, 1.7vw, 26px);
+  letter-spacing: -0.02em;
+}
+/* 详情页左上：回总览的小链接 + 大标题 */
+.ix-crumb {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  margin-bottom: 18px;
+  font-size: 13px;
+  color: var(--text3);
+  text-decoration: none;
+}
+.ix-crumb:hover {
+  color: var(--text);
+}
+.ix-crumb svg {
+  width: 14px;
+  height: 14px;
+}
+.ix-title {
+  margin: 12px 0 8px;
+  max-width: 100%;
+  font-size: clamp(44px, 5vw, 76px);
+  line-height: 1.02;
+  font-weight: 650;
+  letter-spacing: -0.045em;
+  overflow-wrap: anywhere;
+}
+/* 右侧：跟着滚动停在视口里 */
+.ix-pane {
+  position: sticky;
+  top: 92px;
+  align-self: start;
+  display: flex;
+  flex-direction: column;
+  gap: 40px;
+  max-height: calc(100vh - 110px);
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  padding-bottom: 24px;
+}
+/* 右侧的一段：胶囊行 → 大标题 → 内容，竖排 */
+.ix-sec {
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
+  gap: 16px;
+}
+.ix-sec > h2 {
+  margin: 0 0 4px;
+  font-size: 44px;
+  line-height: 1.05;
+  font-weight: 650;
+  letter-spacing: -0.04em;
+  overflow-wrap: anywhere;
+}
+.ix-chips {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+}
+/* 大标题下的一行标识（包名 / 资源库标识），等宽小字 */
+.ix-sub {
+  font-family: var(--font-mono);
+  font-size: 12px;
+  color: var(--text3);
+}
+/* 左侧标题区下的动作行，与下面的索引隔开 */
+.ix-acts {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 10px;
+  margin: 22px 0 40px;
+}
+/* 索引的第二组（设置之类）与上一组拉开 */
+.ix-grp + .ix-grp,
+.ix-it + .ix-grp,
+.ix-idx > p + .ix-grp {
+  margin-top: 34px;
+}
+@media (max-width: 760px) {
+  .ix-wrap {
+    grid-template-columns: minmax(0, 1fr);
+    gap: 40px;
+    padding: 0 22px 56px;
+  }
+  .ix-it b {
+    font-size: 32px;
+  }
+  .ix-pane {
+    position: static;
+    max-height: none;
+    overflow: visible;
+  }
+  .ix-bg::after {
+    background: linear-gradient(180deg, rgba(12, 12, 14, 0.3) 0%, var(--bg) 70%);
+  }
 }

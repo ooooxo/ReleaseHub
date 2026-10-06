@@ -1,75 +1,76 @@
 <template>
-  <div class="layout-max">
-    <div class="appbar">
-      <button
-        type="button"
-        class="back"
-        aria-label="返回总览"
-        @click="router.push({ path: '/', hash: '#temp-hub' })"
-      >
-        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M15 18l-6-6 6-6" /></svg>
-      </button>
-      <div class="ab-titles">
-        <h1>
-          {{ item?.originalName || '临时文件' }}
-          <span class="chip temp">临时</span>
-          <span v-if="pageLoading" class="loading-pill">载入中…</span>
-        </h1>
-        <span class="pkg">
-          {{ item?.kind === 'folder' ? `文件夹 · ${item.fileCount || 0} 个文件` : '单文件' }}
-          · 到期即删 · #{{ itemIdShort }}
-        </span>
-      </div>
-      <div class="ab-actions">
-        <TwoStepButton
-          label="取消分享"
-          armed-label="再按：立即删除文件"
-          btn-class="btn btn-danger btn-sm"
-          :busy="pageLoading || !item"
-          @confirm="cancelItem"
-        />
-      </div>
-    </div>
+  <div class="temp-detail">
+    <LiquidBackdrop :entry="bgEntry" />
 
-    <p v-if="errMsg" class="card err-c">{{ errMsg }}</p>
+    <div class="ix-wrap">
+      <!-- 左：文件名大字 + 剩余时间（这一页最要紧的状态）+ 动作 -->
+      <div class="ix-idx">
+        <RouterLink to="/" class="ix-crumb">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M15 18l-6-6 6-6" /></svg>
+          总览
+        </RouterLink>
+        <div class="ix-chips">
+          <span class="chip temp">临时文件</span>
+          <span v-if="item" class="chip">{{ item.kind === 'folder' ? `文件夹 · ${item.fileCount || 0} 个文件` : '单文件' }}</span>
+          <span class="chip num">#{{ itemIdShort }}</span>
+          <span v-if="pageLoading" class="chip">载入中…</span>
+        </div>
+        <h1 class="ix-title" :class="{ long: titleLong }">{{ item?.originalName || '临时文件' }}</h1>
 
-    <template v-else-if="item">
-      <div class="card block timer-card">
-        <div class="bigring" :class="{ warn: nearExpiry }">
-          <svg width="150" height="150" viewBox="0 0 150 150">
-            <circle cx="75" cy="75" r="66" fill="none" stroke="var(--inset)" stroke-width="8" />
-            <circle
-              cx="75"
-              cy="75"
-              r="66"
-              fill="none"
-              :stroke="nearExpiry ? 'var(--amber)' : 'var(--accent)'"
-              stroke-width="8"
-              stroke-linecap="round"
-              :stroke-dasharray="RING_C"
-              :stroke-dashoffset="ringOffset"
-              transform="rotate(-90 75 75)"
-            />
-          </svg>
-          <div class="bt" aria-live="polite">
-            <span class="bv mono">{{ ringRemaining }}</span>
-            <span class="bl">剩余</span>
+        <p v-if="errMsg" class="err-c">{{ errMsg }}</p>
+        <template v-else-if="item">
+          <div class="timer">
+            <div class="bigring" :class="{ warn: nearExpiry }">
+              <svg width="150" height="150" viewBox="0 0 150 150">
+                <circle cx="75" cy="75" r="66" fill="none" stroke="var(--inset)" stroke-width="8" />
+                <circle
+                  cx="75"
+                  cy="75"
+                  r="66"
+                  fill="none"
+                  :stroke="nearExpiry ? 'var(--amber)' : 'var(--accent)'"
+                  stroke-width="8"
+                  stroke-linecap="round"
+                  :stroke-dasharray="RING_C"
+                  :stroke-dashoffset="ringOffset"
+                  transform="rotate(-90 75 75)"
+                />
+              </svg>
+              <div class="bt" aria-live="polite">
+                <span class="bv mono">{{ ringRemaining }}</span>
+                <span class="bl">剩余</span>
+              </div>
+            </div>
+            <div class="timer-info">
+              <span class="field-label">到期时间</span>
+              <p class="expire-at mono">{{ expireLocal }}</p>
+              <p class="remain-line" :class="{ warn: nearExpiry, expired: isExpired }">
+                <span class="rl-v mono">{{ liveRemaining }}</span>
+                <span v-if="!isExpired" class="rl-suffix">后到期</span>
+              </p>
+            </div>
           </div>
-        </div>
-        <div class="timer-info">
-          <span class="field-label">到期时间</span>
-          <p class="expire-at mono">{{ expireLocal }}</p>
-          <p class="remain-line" :class="{ warn: nearExpiry, expired: isExpired }">
-            <span class="rl-v mono">{{ liveRemaining }}</span>
-            <span v-if="!isExpired" class="rl-suffix">后到期</span>
-          </p>
+          <div class="ix-acts">
+            <button v-if="item.landingUrl" type="button" class="btn btn-primary" @click="copyShare">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><rect x="9" y="9" width="11" height="11" rx="2" /><path d="M5 15V5a2 2 0 0 1 2-2h10" /></svg>
+              复制分享链
+            </button>
+            <TwoStepButton
+              label="取消分享"
+              armed-label="再按：立即删除文件"
+              btn-class="btn btn-danger"
+              :busy="pageLoading || !item"
+              @confirm="cancelItem"
+            />
+          </div>
           <p class="hint sm">到期后文件与分享链自动失效并删除，不可恢复。</p>
-        </div>
+        </template>
       </div>
 
-      <template v-if="publicBase">
-        <div class="section-bar"><div class="sb-l"><h2>对外链接</h2></div></div>
-        <div class="card block links-card" :class="{ 'section-dim': pageLoading }">
+      <!-- 右：对外链接 · 信息 · 文件树 -->
+      <aside v-if="item" class="ix-pane">
+        <section v-if="publicBase" class="ix-sec">
+          <span class="field-label">对外链接</span>
           <ShareLinkRow v-if="item.landingUrl" :label="item.kind === 'folder' ? '浏览页' : '分享页'" :url="item.landingUrl" />
           <ShareLinkRow v-if="item.archiveUrl" label="根目录 ZIP 直链" :url="item.archiveUrl" />
           <ShareLinkRow
@@ -78,26 +79,22 @@
             :url="item.downloadUrl"
           />
           <ShareLinkRow v-if="item.metaUrl" label="JSON 元信息" :url="item.metaUrl" />
-        </div>
-      </template>
-
-      <div class="section-bar"><div class="sb-l"><h2>{{ item.kind === 'folder' ? '文件夹信息' : '文件信息' }}</h2></div></div>
-      <div class="card block">
-        <ul class="kv">
-          <li><span class="k">大小</span><span class="v mono">{{ formatBytes(item.size) }}</span></li>
-          <li><span class="k">类型</span><span class="v">{{ item.kind === 'folder' ? '文件夹' : '单文件' }}</span></li>
-          <li v-if="item.kind === 'folder'">
-            <span class="k">文件数</span><span class="v mono">{{ item.fileCount || (item.entries || []).length }}</span>
-          </li>
-          <li><span class="k">下载次数</span><span class="v mono">{{ item.downloadCount ?? 0 }}</span></li>
-          <li v-if="item.mimeType"><span class="k">MIME 类型</span><span class="v mono">{{ item.mimeType }}</span></li>
-          <li><span class="k">创建时间</span><span class="v mono">{{ item.createdAt }}</span></li>
-        </ul>
-      </div>
-
-      <template v-if="item.kind === 'folder' && entryList.length">
-        <div class="section-bar"><div class="sb-l"><h2>文件树</h2><span class="sb-count">{{ entryList.length }}</span></div></div>
-        <div class="card block">
+        </section>
+        <section class="ix-sec">
+          <span class="field-label">{{ item.kind === 'folder' ? '文件夹信息' : '文件信息' }}</span>
+          <ul class="kv">
+            <li><span class="k">大小</span><span class="v mono">{{ formatBytes(item.size) }}</span></li>
+            <li><span class="k">类型</span><span class="v">{{ item.kind === 'folder' ? '文件夹' : '单文件' }}</span></li>
+            <li v-if="item.kind === 'folder'">
+              <span class="k">文件数</span><span class="v mono">{{ item.fileCount || (item.entries || []).length }}</span>
+            </li>
+            <li><span class="k">下载次数</span><span class="v mono">{{ item.downloadCount ?? 0 }}</span></li>
+            <li v-if="item.mimeType"><span class="k">MIME 类型</span><span class="v mono">{{ item.mimeType }}</span></li>
+            <li><span class="k">创建时间</span><span class="v mono">{{ item.createdAt }}</span></li>
+          </ul>
+        </section>
+        <section v-if="item.kind === 'folder' && entryList.length" class="ix-sec">
+          <span class="field-label">文件树 · {{ entryList.length }}</span>
           <ul class="entry-list">
             <li v-for="ent in entryList" :key="ent.relativePath" class="entry-row">
               <span class="entry-path">{{ ent.relativePath }}</span>
@@ -105,9 +102,9 @@
               <button type="button" class="btn btn-ghost btn-sm" @click="copyEntryLink(ent)">复制直链</button>
             </li>
           </ul>
-        </div>
-      </template>
-    </template>
+        </section>
+      </aside>
+    </div>
   </div>
 </template>
 
@@ -123,6 +120,7 @@ import { formatRemainingSec } from '@/utils/format-remaining';
 import ShareLinkRow from '@/components/ShareLinkRow.vue';
 import { usePublicBase } from '@/composables/usePublicBase';
 import { encodePathForUrl } from '@/utils/file-tree';
+import LiquidBackdrop from '@/components/LiquidBackdrop.vue';
 
 const route = useRoute();
 const router = useRouter();
@@ -138,6 +136,16 @@ const itemId = computed(() => {
   return /^[0-9a-f]{16}$/.test(id) ? id : '';
 });
 const itemIdShort = computed(() => (itemId.value ? itemId.value.slice(0, 8) : '—'));
+const LONG_TITLE = 18;   // 超过这么多字的文件名做标题时降一档
+const titleLong = computed(() => [...(item.value?.originalName || '')].length > LONG_TITLE);
+// 背景液体：以文件名为种子（临时文件没有入口页里的对应项，色调走中性）
+const bgEntry = computed(() => (item.value ? { name: item.value.originalName || '临时文件', description: '', url: '' } : null));
+function copyShare() {
+  copyText(item.value.landingUrl).then(
+    () => toast('已复制分享链'),
+    () => toast('复制失败', 'error'),
+  );
+}
 
 const expireLocal = computed(() => {
   if (!item.value?.expireAt) return '—';
@@ -267,31 +275,34 @@ onUnmounted(() => {
 </script>
 
 <style scoped>
-/* 仅页面特有样式；通用类（.appbar/.card/.bigring/.kv/.section-bar/.link-row 等）来自 global.css */
-.loading-pill {
-  font-size: 0.66rem;
-  font-weight: 600;
-  color: var(--accent);
-  background: var(--accent-tint);
-  padding: 3px 10px;
-  border-radius: 999px;
-  letter-spacing: 0.04em;
+/* 仅页面特有样式；布局来自 global.css 的索引布局（ix-*），.bigring/.kv 也在那里 */
+.temp-detail {
+  --drop-c: var(--amber);
+}
+/* 文件名做标题：长名降一档，免得断成好几行 */
+.ix-title.long {
+  font-size: clamp(28px, 2.6vw, 40px);
+  line-height: 1.15;
+  letter-spacing: -0.025em;
 }
 .err-c {
-  padding: 18px 20px;
-  margin-bottom: 18px;
+  margin: 12px 0 0;
   color: var(--danger);
   font-size: 0.88rem;
   line-height: 1.5;
   box-sizing: border-box;
 }
 
-/* 倒计时卡片 */
-.timer-card {
+/* 剩余时间：环 + 到期时间，标题下的主状态 */
+.timer {
   display: flex;
   gap: 26px;
   align-items: center;
   flex-wrap: wrap;
+  margin-top: 22px;
+}
+.ix-acts {
+  margin-bottom: 0;
 }
 .timer-info {
   flex: 1;
@@ -314,7 +325,7 @@ onUnmounted(() => {
 }
 
 /* 环内倒计时：定宽单行，绝不换行溢出环边 */
-.timer-card .bigring .bt .bv {
+.timer .bigring .bt .bv {
   white-space: nowrap;
   font-size: 1.4rem;
   line-height: 1.05;

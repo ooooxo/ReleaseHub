@@ -1,7 +1,7 @@
 <template>
   <div
     class="drop-zone"
-    :class="{ drag: dragActive, disabled }"
+    :class="[variant, { drag: dragActive, disabled }]"
     @dragover.prevent="!disabled && (dragActive = true)"
     @dragleave="onDragLeave"
     @drop.prevent="onDrop"
@@ -21,6 +21,8 @@ import { ingestFromDataTransfer, ingestFromFileList } from '@/composables/useFol
 const props = defineProps({
   disabled: { type: Boolean, default: false },
   hint: { type: String, default: '拖文件或文件夹到此处，或点击选文件' },
+  // block：整块投放区；pill：一枚胶囊（总览的临时文件条、资源库详情的上传）。胶囊的类型色读父级的 --drop-c，默认琥珀
+  variant: { type: String, default: 'block' },
 });
 
 const emit = defineEmits(['items']);
@@ -84,6 +86,43 @@ async function onInputChange(e) {
   cursor: pointer;
 }
 .dir-link:hover { color: var(--accent); }
+/* 胶囊形态：一行高，选文件夹是胶囊里的一枚小钮 */
+.drop-zone.pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  height: 40px;
+  padding: 0 6px 0 16px;
+  border-radius: 20px;
+  font-size: 13px;
+  line-height: 1;
+  text-align: left;
+}
+.drop-zone.pill > :slotted(svg) {
+  width: 16px;
+  height: 16px;
+  color: var(--drop-c, var(--amber));
+}
+.drop-zone.pill:hover,
+.drop-zone.pill.drag {
+  border-color: var(--drop-c, var(--amber));
+  background: color-mix(in srgb, var(--drop-c, var(--amber)) 13%, transparent);
+  color: var(--text);
+}
+.drop-zone.pill .dir-link {
+  display: inline-flex;
+  align-items: center;
+  height: 28px;
+  margin: 0;
+  padding: 0 10px;
+  border-radius: 14px;
+  background: rgba(255, 255, 255, 0.06);
+  color: var(--text2);
+  text-decoration: none;
+}
+.drop-zone.pill .dir-link:hover {
+  color: var(--text);
+}
 .hidden-input {
   position: absolute;
   width: 0;

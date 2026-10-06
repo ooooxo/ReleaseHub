@@ -1,7 +1,7 @@
 <template>
   <div class="home">
     <!-- 背景液体：与入口页同一个库，随选中的库流动，压暗当底 -->
-    <div class="bg" aria-hidden="true"><canvas ref="bgCanvas" /></div>
+    <LiquidBackdrop :entry="bgEntry" />
 
     <Teleport defer to="#topbar-actions">
       <Layer v-model:open="showCreate" :guard="createDirty">
@@ -59,11 +59,11 @@
       <button type="button" class="btn btn-ghost btn-sm" @click="load">重试</button>
     </p>
 
-    <div v-else class="wrap">
-      <nav class="idx" aria-label="临时文件与所有库">
+    <div v-else class="ix-wrap">
+      <nav class="ix-idx" aria-label="临时文件与所有库">
         <!-- 临时文件：名单顶上一条——投放入口 + 有效期 + 每个临时文件一枚（剩余时间环） -->
         <div v-if="!tempDisabled" id="temp-hub" class="tstrip">
-          <FolderAwareDropzone class="tdz" @items="onTempItems">
+          <FolderAwareDropzone variant="pill" @items="onTempItems">
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M12 16V4M7 9l5-5 5 5" /><path d="M5 16v3a1 1 0 0 0 1 1h12a1 1 0 0 0 1-1v-3" /></svg>
             <span><span class="drag-only">拖文件到这里 · </span>选文件</span>
           </FolderAwareDropzone>
@@ -104,12 +104,12 @@
         <!-- 应用与资源库并列两列；放不下两列时自动退成一列 -->
         <div class="groups">
         <section v-for="g in groups" :key="g.label" class="g">
-          <div class="grp">{{ g.label }}</div>
+          <div class="ix-grp">{{ g.label }}</div>
           <button
             v-for="it in g.items"
             :key="it.key"
             type="button"
-            class="it"
+            class="ix-it"
             :class="{ on: selKey === it.key }"
             @mouseenter="hoverPick(it.key)"
             @mouseleave="hoverCancel"
@@ -124,7 +124,7 @@
         <p v-if="!allItems.length" class="empty">还没有库。右上角「新建」一个应用或资源库。</p>
       </nav>
 
-      <aside class="pane">
+      <aside class="ix-pane">
         <LibraryPeek
           v-if="selTarget"
           :target="selTarget"
@@ -147,7 +147,8 @@ import { describeUploadBatch } from '@/composables/useFolderUpload';
 import FolderAwareDropzone from '@/components/FolderAwareDropzone.vue';
 import Layer from '@/components/ui/Layer.vue';
 import { useToast } from '@/composables/useToast';
-import { liquidEntry, mountLiquidBackground } from '@/composables/useLiquid';
+import { liquidEntry } from '@/composables/useLiquid';
+import LiquidBackdrop from '@/components/LiquidBackdrop.vue';
 import { usePublicBase } from '@/composables/usePublicBase';
 import LibraryPeek from '@/components/LibraryPeek.vue';
 
@@ -226,15 +227,13 @@ function activate(key) {
 }
 
 /* ---- 背景液体：选中的库变了就流过去；选中临时文件时保持上一幅 ---- */
-const bgCanvas = ref(null);
-let bg = null;
-const NEUTRAL_LIQUID = { name: 'Release Hub', description: '', url: '', motif: 'flow' };
+const bgEntry = ref(null);
 watch(
   () => (selTarget.value?.kind === 'temp' ? null : selTarget.value?.item.key),
   key => {
-    if (!bg || !key) return;
-    bg.flowTo(liquidEntry(selTarget.value.item));
+    if (key) bgEntry.value = liquidEntry(selTarget.value.item);
   },
+  { immediate: true },
 );
 
 function goItem(it) {
@@ -438,14 +437,12 @@ onActivated(() => {
     firstActivation = false;
     return;
   }
-  bg?.resume();
   load({ silent: true });   // 详情页里可能改过：后台刷新列表与右侧内容
   refreshKey.value += 1;
 });
 onDeactivated(() => {
   stopTimers();
   clearTimeout(hoverT);
-  bg?.pause();
 });
 const refreshKey = ref(0);
 
@@ -454,40 +451,17 @@ onMounted(async () => {
   loadPublicBase();
   await load();
   if (!selKey.value && allItems.value.length) pick(allItems.value[0].key);
-  bg = mountLiquidBackground(bgCanvas.value, selTarget.value && selTarget.value.kind !== 'temp' ? liquidEntry(selTarget.value.item) : NEUTRAL_LIQUID);
 });
 
 onUnmounted(() => {
   stopTimers();
   clearTimeout(hoverT);
-  bg?.stop();
 });
 </script>
 
 <style scoped>
 .home {
   position: relative;
-}
-/* 背景液体：整页一幅，压暗到三成；左侧再压一道，让大字名单读得清 */
-.bg {
-  position: fixed;
-  inset: 0;
-  z-index: 0;
-  pointer-events: none;
-}
-.bg canvas {
-  position: absolute;
-  inset: 0;
-  width: 100%;
-  height: 100%;
-  display: block;
-  opacity: 0.32;
-}
-.bg::after {
-  content: '';
-  position: absolute;
-  inset: 0;
-  background: linear-gradient(90deg, var(--bg) 0%, rgba(12, 12, 14, 0.7) 45%, rgba(12, 12, 14, 0.35) 100%);
 }
 .state {
   position: relative;
@@ -502,22 +476,7 @@ onUnmounted(() => {
   color: var(--danger-text);
 }
 
-.wrap {
-  position: relative;
-  z-index: 1;
-  display: grid;
-  grid-template-columns: minmax(0, 1fr) minmax(0, 1.05fr);
-  gap: 56px;
-  padding: 12px 40px 72px 6%;
-}
-
 /* ---- 左：临时文件条 + 大字名单 ---- */
-.idx {
-  display: flex;
-  flex-direction: column;
-  align-items: flex-start;
-  min-width: 0;
-}
 .tstrip {
   display: flex;
   flex-wrap: wrap;
@@ -525,47 +484,6 @@ onUnmounted(() => {
   gap: 8px;
   margin-bottom: 34px;
   scroll-margin-top: 90px;
-}
-.tdz {
-  display: inline-flex;
-  align-items: center;
-  gap: 8px;
-  height: 40px;
-  padding: 0 6px 0 16px;
-  border-radius: 20px;
-  border: 1.5px dashed var(--border-strong);
-  color: var(--text2);
-  font-size: 13px;
-  cursor: pointer;
-  transition: border-color var(--t-fast) var(--ease-hover), color var(--t-fast) var(--ease-hover), background var(--t-fast) var(--ease-hover);
-}
-.tdz > svg {
-  width: 16px;
-  height: 16px;
-  color: var(--amber);
-}
-.tdz:hover,
-.tdz.drag {
-  border-color: var(--amber);
-  color: var(--text);
-  background: var(--amber-tint);
-}
-.tdz :deep(.hidden-input) {
-  display: none;
-}
-.tdz :deep(.dir-link) {
-  height: 28px;
-  padding: 0 10px;
-  border: 0;
-  border-radius: 14px;
-  background: rgba(255, 255, 255, 0.06);
-  color: var(--text2);
-  font: inherit;
-  font-size: 12px;
-  cursor: pointer;
-}
-.tdz :deep(.dir-link:hover) {
-  color: var(--text);
 }
 .tttl {
   height: 40px;
@@ -679,69 +597,10 @@ onUnmounted(() => {
   align-items: flex-start;
   max-width: 100%;
 }
-.grp {
-  margin: 0 0 6px;
-  font-size: 13px;
-  color: var(--text3);
-}
-.it {
-  display: flex;
-  align-items: baseline;
-  gap: 14px;
-  max-width: 100%;
-  padding: 5px 0;
-  border: 0;
-  background: none;
-  text-align: left;
-  font: inherit;
-  color: var(--text3);
-  cursor: pointer;
-}
-.it {
-  min-width: 0;
-}
-.it b {
-  font-size: clamp(28px, 2.5vw, 40px);
-  line-height: 1.1;
-  font-weight: 650;
-  letter-spacing: -0.04em;
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  min-width: 0;
-  transition: color var(--t-fast) var(--ease-hover);
-}
-.it span {
-  flex: none;
-  font-size: 13px;
-  transition: color var(--t-fast) var(--ease-hover);
-}
-.it:hover b,
-.it.on b,
-.it:focus-visible b {
-  color: var(--text);
-}
-.it.on span {
-  color: var(--text2);
-}
-.it:focus-visible {
-  outline: none;
-}
 .empty {
   margin: 0;
   font-size: 15px;
   color: var(--text2);
-}
-
-/* ---- 右：选中项的内容物，跟着滚动停在视口里 ---- */
-.pane {
-  position: sticky;
-  top: 92px;
-  align-self: start;
-  max-height: calc(100vh - 110px);
-  overflow-y: auto;
-  overscroll-behavior: contain;
-  padding-bottom: 24px;
 }
 
 /* ---- 「新建」浮层 ---- */
@@ -839,24 +698,15 @@ onUnmounted(() => {
 }
 
 @media (max-width: 760px) {
-  .wrap {
-    grid-template-columns: minmax(0, 1fr);
-    padding: 0 22px 56px;
-  }
-  .pane {
+  /* 总览的右侧在手机上不出：点名字直接进详情 */
+  .ix-pane {
     display: none;
   }
   .groups {
     flex-direction: column;
   }
-  .it b {
-    font-size: 32px;
-  }
   .drag-only {
     display: none;
-  }
-  .bg::after {
-    background: linear-gradient(180deg, rgba(12, 12, 14, 0.3) 0%, var(--bg) 70%);
   }
 }
 </style>

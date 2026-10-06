@@ -1,19 +1,23 @@
 <template>
-  <div class="layout-max">
-    <!-- 顶栏 -->
-    <div class="appbar">
-      <button type="button" class="back" v-tip="'返回总览'" @click="router.push('/')">
-        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M15 18l-6-6 6-6" /></svg>
-      </button>
-      <span class="ab-cover"><img v-if="cover" :src="cover" alt="" /></span>
-      <div class="ab-titles">
-        <h1>
-          {{ displayLabel }}
-          <span class="chip" :class="repoType === 'tauri' ? 'tauri' : 'general'">{{ repoType === 'tauri' ? 'Tauri' : 'General' }}</span>
-        </h1>
-        <span class="pkg">{{ appName }}</span>
-      </div>
-      <div class="ab-actions">
+  <div class="app-detail">
+    <!-- 背景液体：这个应用自己的那一幅（与入口页、总览同一个库） -->
+    <LiquidBackdrop :entry="bgEntry" />
+
+    <div class="ix-wrap">
+      <!-- 左：应用名大字 + 版本索引 + 设置索引 -->
+      <nav class="ix-idx" aria-label="版本与设置">
+        <RouterLink to="/" class="ix-crumb">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M15 18l-6-6 6-6" /></svg>
+          总览
+        </RouterLink>
+        <div class="ix-chips">
+          <span class="chip" :class="repoType === 'tauri' ? 'tauri' : 'general'">{{ repoType === 'tauri' ? 'Tauri' : '通用' }}</span>
+          <span class="chip num">{{ published?.version || '尚未发布' }}</span>
+          <span class="chip">{{ versions.length }} 个版本</span>
+        </div>
+        <h1 class="ix-title">{{ displayLabel }}</h1>
+        <span class="ix-sub">{{ appName }}</span>
+        <div class="ix-acts">
         <Layer v-model:open="showNewVer" :guard="!!newVerInput.trim()">
           <template #trigger="{ toggle }">
             <button type="button" class="btn btn-primary btn-sm" :aria-expanded="showNewVer" @click="toggle">
@@ -33,22 +37,138 @@
             </div>
           </form>
         </Layer>
-      </div>
-    </div>
+          <button v-if="latestAppShortcutUrl" type="button" class="btn btn-ghost btn-sm" @click="copy(latestAppShortcutUrl)">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><rect x="9" y="9" width="11" height="11" rx="2" /><path d="M5 15V5a2 2 0 0 1 2-2h10" /></svg>
+            复制最新版本页
+          </button>
+        </div>
 
-    <!-- 基本信息：包名 / 展示名 / 简介 / 对外接口 -->
-    <div class="adv info-adv" :class="{ open: infoOpen }">
-      <button type="button" class="adv-head" :aria-expanded="infoOpen" @click="infoOpen = !infoOpen">
-        <span class="adv-ico">
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M12 20h9" /><path d="M16.5 3.5a2.1 2.1 0 0 1 3 3L7 19l-4 1 1-4z" /></svg>
-        </span>
-        <span class="adv-t">
-          <b>基本信息</b>
-          <small>包名 / 展示名 / 简介 / 对外接口</small>
-        </span>
-        <svg class="chev" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M6 9l6 6 6-6" /></svg>
-      </button>
-      <div class="adv-body">
+        <div class="ix-grp">版本</div>
+        <p v-if="loading" class="muted">加载中…</p>
+        <p v-else-if="!versions.length" class="muted">还没有任何版本，点「新建版本」开始。</p>
+        <button
+          v-for="v in versions"
+          :key="v.version"
+          type="button"
+          class="ix-it sm"
+          :class="{ on: openVer === v.version }"
+          @click="selectVer(v.version)"
+        >
+          <b class="num">{{ v.version }}</b>
+          <span><em v-if="v.isLatest" class="lt">当前</em>{{ realFiles(v).length }} 个文件</span>
+        </button>
+
+        <div class="ix-grp">设置</div>
+        <button type="button" class="ix-it sm" :class="{ on: infoOpen }" @click="selectPane('info')">
+          <b>基本信息</b><span>包名 · 展示名 · 简介 · 对外接口</span>
+        </button>
+        <button type="button" class="ix-it sm" :class="{ on: advOpen }" @click="selectPane('adv')">
+          <b>高级 / 危险</b><span>{{ jsonField }} JSON · 重建 · 删除应用</span>
+        </button>
+      </nav>
+
+      <!-- 右：选中项的内容（版本的展开态 / 基本信息 / 高级）；什么都没选时是当前发布 -->
+      <aside class="ix-pane">
+        <section v-if="openV" :key="openV.version" class="ix-sec" @keydown.esc="selectPane(null)">
+          <div class="ix-chips">
+            <span v-if="openV.isLatest" class="latest">当前发布</span>
+            <span v-else class="chip">未发布</span>
+            <span class="chip">{{ realFiles(openV).length }} 个文件</span>
+          </div>
+          <h2 class="num">{{ openV.version }}</h2>
+        <!-- 说明：已发布版本改的是线上更新清单，其余是说明草稿 -->
+        <div>
+          <span class="field-label">{{ openV.isLatest ? '更新说明（线上，已安装客户端下一次检查即可见）' : '说明草稿（发布时写入更新清单）' }}</span>
+          <textarea v-model="verEdit.model.notes" class="textarea" rows="3" placeholder="更新说明…" />
+        </div>
+
+        <!-- 上传投放区：交给上传托盘 -->
+        <div
+          class="dropmini"
+          :class="{ drag: dragVer === openV.version }"
+          role="button"
+          tabindex="0"
+          @dragover.prevent="dragVer = openV.version"
+          @dragleave="e => !e.currentTarget.contains(e.relatedTarget) && (dragVer = null)"
+          @drop.prevent="onDrop($event, openV.version)"
+          @click="fileInputs[openV.version]?.click()"
+          @keydown.enter.self.prevent="fileInputs[openV.version]?.click()"
+        >
+          <input
+            :ref="el => el && (fileInputs[openV.version] = el)"
+            type="file"
+            multiple
+            class="hidden-input"
+            @click.stop
+            @change="onFileChange(openV.version, $event)"
+          />
+          <b>{{ repoType === 'tauri' ? '拖各平台包及对应 .sig 到此' : '拖文件到此处' }}</b>
+          或点击选文件
+        </div>
+
+        <!-- 文件列表 -->
+        <div v-if="realFiles(openV).length">
+          <span class="field-label">文件 · {{ realFiles(openV).length }}</span>
+          <TransitionGroup name="slide-up" tag="div" class="filelist">
+            <div v-for="f in realFiles(openV)" :key="f.name" class="frow">
+              <span class="fi" :class="{ sig: isSig(f.name) }">
+                <svg v-if="isSig(f.name)" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M12 2 4 6v6c0 5 3.4 8 8 10 4.6-2 8-5 8-10V6z" /></svg>
+                <svg v-else viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4M7 10l5 5 5-5M12 15V3" /></svg>
+              </span>
+              <a class="fname" :href="fileLandingUrl(openV.version, f.name)" target="_blank" rel="noopener">{{ f.name }}</a>
+              <span class="fsize">{{ formatBytes(f.size) }}</span>
+              <TwoStepButton
+                label="×"
+                armed-label="再按删除"
+                :aria-label="`删除 ${f.name}`"
+                btn-class="fdel"
+                :busy="deletingFile === `${openV.version}/${f.name}`"
+                @confirm="deleteFile(openV.version, f.name)"
+              />
+            </div>
+          </TransitionGroup>
+        </div>
+
+        <!-- 缺 .sig 时就地拦一下，写清缺了哪些 -->
+        <div v-if="sigWarn && sigWarn.ver === openV.version" class="danger-zone">
+          <span class="dz-t"><b>缺少 .sig：{{ sigWarn.miss.join('、') }}</b> — 这些平台的客户端将无法校验更新</span>
+          <div class="vactions">
+            <button type="button" class="btn btn-ghost btn-sm" @click="sigWarn = null">取消</button>
+            <button type="button" class="btn btn-danger btn-sm" :disabled="publishing" @click="publishVersion(openV.version, true)">仍要发布</button>
+          </div>
+        </div>
+
+        <!-- 版本操作 -->
+        <div class="vactions">
+          <button type="button" class="btn btn-sm" :class="openV.isLatest ? 'btn-ghost' : 'btn-primary'" :disabled="publishing" @click="publishVersion(openV.version)">
+            {{ (verEdit.dirty ? '保存并' : '') + (openV.isLatest ? '重新发布' : '设为最新发布') }}
+          </button>
+          <button v-if="publicBase" type="button" class="btn btn-ghost btn-sm" @click="copy(versionPageUrl(openV.version))">复制版本页</button>
+          <ConfirmButton
+            v-if="openV.isLatest"
+            label="删除此版本"
+            :title="`删除当前发布的 ${openV.version}？`"
+            detail="目录下全部文件永久删除，更新清单随之清空——已安装客户端将查不到更新。"
+            confirm-label="删除"
+            danger
+            align="start"
+            btn-class="btn btn-danger btn-sm"
+            @confirm="deleteVersion(openV.version)"
+          />
+          <TwoStepButton v-else label="删除此版本" armed-label="再按删除" btn-class="btn btn-danger btn-sm" @confirm="deleteVersion(openV.version)" />
+        </div>
+        <SaveBar
+          ref="verBar"
+          :dirty="verEdit.dirty"
+          :busy="savingNotes"
+          :save-label="openV.isLatest ? '保存并更新线上' : '保存'"
+          @save="saveVersionNotes"
+          @discard="verEdit.discard()"
+        />
+        </section>
+
+        <section v-else-if="infoOpen" class="ix-sec">
+          <h2>基本信息</h2>
         <div class="adv-group">
           <label class="sub-label">包名（目录与 URL；修改后 latest.json、直链与公开页路径全部变为新包名）</label>
           <div class="row-input">
@@ -83,182 +203,10 @@
             <code>/app/{{ appName }}/latest</code> 302 到当前已发布目录；带 <code>?redirect=1</code> 的直链跳转到当前发布的主安装包（Tauri 排除 <code>.sig</code>）。
           </p>
         </div>
-      </div>
-    </div>
+        </section>
 
-    <!-- 当前发布 hero -->
-    <div v-if="latestLoaded && published" class="published">
-      <div class="pub-main">
-        <span class="pub-label">当前发布</span>
-        <!-- 发布成功的结果时刻：换了版本号才弹一下，首屏不动 -->
-        <Transition name="ver-swap" mode="out-in">
-          <div :key="published.version" class="pub-ver">{{ published.version }}</div>
-        </Transition>
-        <div class="pub-meta">
-          <template v-if="published.pub_date">发布于 {{ fmtDate(published.pub_date) }} · </template>{{ versions.length }} 个历史版本
-        </div>
-        <div v-if="published.notes" class="pub-notes">{{ published.notes }}</div>
-      </div>
-      <div class="pub-actions">
-        <button v-if="latestAppShortcutUrl" type="button" class="btn btn-ghost" @click="copy(latestAppShortcutUrl)">
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><rect x="9" y="9" width="11" height="11" rx="2" /><path d="M5 15V5a2 2 0 0 1 2-2h10" /></svg>
-          复制最新版本页
-        </button>
-        <button v-if="publishedVersionDir" type="button" class="btn btn-ghost" @click="editPublishedNotes">编辑发布说明</button>
-      </div>
-    </div>
-    <div v-else-if="latestLoaded && !published" class="published empty-pub">
-      <div class="pub-main">
-        <span class="pub-label muted-label">尚未发布</span>
-        <div class="pub-empty-text">上传文件后，在某一版本上点击「设为最新发布」。</div>
-      </div>
-    </div>
-
-    <!-- 版本列表 -->
-    <div class="section-bar">
-      <div class="sb-l"><h2>版本</h2><span class="sb-count">{{ versions.length }} 个</span></div>
-    </div>
-
-    <div v-if="loading" class="muted">加载中…</div>
-    <div v-else-if="!versions.length" class="muted empty-v">还没有任何版本，点击右上角「新建版本」开始。</div>
-    <div v-else class="vlist">
-      <article
-        v-for="v in versions"
-        :key="v.version"
-        :ref="el => setCardEl(v.version, el)"
-        class="vcard"
-        :class="{ open: openVer === v.version }"
-      >
-        <div
-          class="vhead"
-          role="button"
-          tabindex="0"
-          :aria-expanded="openVer === v.version"
-          @click="toggleVer(v.version)"
-          @keydown.enter.prevent="toggleVer(v.version)"
-          @keydown.space.prevent="toggleVer(v.version)"
-        >
-          <span class="vnum">{{ v.version }}</span>
-          <span v-if="v.isLatest" class="latest">当前最新</span>
-          <div class="vplats">
-            <span v-for="c in versionChips(v)" :key="c" class="vchip">{{ c }}</span>
-          </div>
-          <span class="vfiles-n">{{ realFiles(v).length }} 文件</span>
-          <svg class="chev" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M6 9l6 6 6-6" /></svg>
-        </div>
-        <Transition name="vexpand">
-        <div v-if="openVer === v.version" class="vgrow">
-          <div class="vbody" @keydown.esc="toggleVer(v.version)">
-            <div class="vbody-inner">
-              <!-- 说明：已发布版本改的是线上更新清单，其余是说明草稿 -->
-              <div>
-                <span class="field-label">{{ v.isLatest ? '更新说明（线上，已安装客户端下一次检查即可见）' : '说明草稿（发布时写入更新清单）' }}</span>
-                <textarea v-model="verEdit.model.notes" class="textarea" rows="3" placeholder="更新说明…" />
-              </div>
-
-              <!-- 上传投放区：交给上传托盘 -->
-              <div
-                class="dropmini"
-                :class="{ drag: dragVer === v.version }"
-                role="button"
-                tabindex="0"
-                @dragover.prevent="dragVer = v.version"
-                @dragleave="e => !e.currentTarget.contains(e.relatedTarget) && (dragVer = null)"
-                @drop.prevent="onDrop($event, v.version)"
-                @click="fileInputs[v.version]?.click()"
-                @keydown.enter.self.prevent="fileInputs[v.version]?.click()"
-              >
-                <input
-                  :ref="el => el && (fileInputs[v.version] = el)"
-                  type="file"
-                  multiple
-                  class="hidden-input"
-                  @click.stop
-                  @change="onFileChange(v.version, $event)"
-                />
-                <b>{{ repoType === 'tauri' ? '拖各平台包及对应 .sig 到此' : '拖文件到此处' }}</b>
-                或点击选文件
-              </div>
-
-              <!-- 文件列表 -->
-              <div v-if="realFiles(v).length">
-                <span class="field-label">文件 · {{ realFiles(v).length }}</span>
-                <TransitionGroup name="slide-up" tag="div" class="filelist">
-                  <div v-for="f in realFiles(v)" :key="f.name" class="frow">
-                    <span class="fi" :class="{ sig: isSig(f.name) }">
-                      <svg v-if="isSig(f.name)" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M12 2 4 6v6c0 5 3.4 8 8 10 4.6-2 8-5 8-10V6z" /></svg>
-                      <svg v-else viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4M7 10l5 5 5-5M12 15V3" /></svg>
-                    </span>
-                    <a class="fname" :href="fileLandingUrl(v.version, f.name)" target="_blank" rel="noopener">{{ f.name }}</a>
-                    <span class="fsize">{{ formatBytes(f.size) }}</span>
-                    <TwoStepButton
-                      label="×"
-                      armed-label="再按删除"
-                      :aria-label="`删除 ${f.name}`"
-                      btn-class="fdel"
-                      :busy="deletingFile === `${v.version}/${f.name}`"
-                      @confirm="deleteFile(v.version, f.name)"
-                    />
-                  </div>
-                </TransitionGroup>
-              </div>
-
-              <!-- 缺 .sig 时就地拦一下，写清缺了哪些 -->
-              <div v-if="sigWarn && sigWarn.ver === v.version" class="danger-zone">
-                <span class="dz-t"><b>缺少 .sig：{{ sigWarn.miss.join('、') }}</b> — 这些平台的客户端将无法校验更新</span>
-                <div class="vactions">
-                  <button type="button" class="btn btn-ghost btn-sm" @click="sigWarn = null">取消</button>
-                  <button type="button" class="btn btn-danger btn-sm" :disabled="publishing" @click="publishVersion(v.version, true)">仍要发布</button>
-                </div>
-              </div>
-
-              <!-- 版本操作 -->
-              <div class="vactions">
-                <button type="button" class="btn btn-sm" :class="v.isLatest ? 'btn-ghost' : 'btn-primary'" :disabled="publishing" @click="publishVersion(v.version)">
-                  {{ (verEdit.dirty ? '保存并' : '') + (v.isLatest ? '重新发布' : '设为最新发布') }}
-                </button>
-                <button v-if="publicBase" type="button" class="btn btn-ghost btn-sm" @click="copy(versionPageUrl(v.version))">复制版本页</button>
-                <ConfirmButton
-                  v-if="v.isLatest"
-                  label="删除此版本"
-                  :title="`删除当前发布的 ${v.version}？`"
-                  detail="目录下全部文件永久删除，更新清单随之清空——已安装客户端将查不到更新。"
-                  confirm-label="删除"
-                  danger
-                  align="start"
-                  btn-class="btn btn-danger btn-sm"
-                  @confirm="deleteVersion(v.version)"
-                />
-                <TwoStepButton v-else label="删除此版本" armed-label="再按删除" btn-class="btn btn-danger btn-sm" @confirm="deleteVersion(v.version)" />
-              </div>
-              <SaveBar
-                ref="verBar"
-                :dirty="verEdit.dirty"
-                :busy="savingNotes"
-                :save-label="v.isLatest ? '保存并更新线上' : '保存'"
-                @save="saveVersionNotes"
-                @discard="verEdit.discard()"
-              />
-            </div>
-          </div>
-        </div>
-        </Transition>
-      </article>
-    </div>
-
-    <!-- 高级 / 危险操作 -->
-    <div class="adv" :class="{ open: advOpen }">
-      <button type="button" class="adv-head" :aria-expanded="advOpen" @click="advOpen = !advOpen">
-        <span class="adv-ico">
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7"><circle cx="12" cy="12" r="3" /><path d="M19 12a7 7 0 0 0-.1-1l2-1.5-2-3.5-2.4 1a7 7 0 0 0-1.7-1l-.4-2.5h-4l-.4 2.5a7 7 0 0 0-1.7 1l-2.4-1-2 3.5 2 1.5a7 7 0 0 0 0 2l-2 1.5 2 3.5 2.4-1a7 7 0 0 0 1.7 1l.4 2.5h4l.4-2.5a7 7 0 0 0 1.7-1l2.4 1 2-3.5-2-1.5a7 7 0 0 0 .1-1z" /></svg>
-        </span>
-        <span class="adv-t">
-          <b>高级 / 危险操作</b>
-          <small>{{ repoType === 'tauri' ? 'platforms' : 'files' }} JSON、发布时间、从磁盘重建、删除应用</small>
-        </span>
-        <svg class="chev" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M6 9l6 6 6-6" /></svg>
-      </button>
-      <div class="adv-body">
+        <section v-else-if="advOpen" class="ix-sec">
+          <h2>高级 / 危险</h2>
         <template v-if="latestLoaded && published">
           <div class="adv-group">
             <span class="field-label">发布时间 pub_date（ISO 字符串，可选）</span>
@@ -314,14 +262,37 @@
             @confirm="deleteApp"
           />
         </div>
-      </div>
+        </section>
+
+        <section v-else-if="latestLoaded && published" class="ix-sec">
+          <span class="pub-label">当前发布</span>
+          <!-- 发布成功的结果时刻：换了版本号才弹一下，首屏不动 -->
+          <Transition name="ver-swap" mode="out-in">
+            <h2 :key="published.version" class="num">{{ published.version }}</h2>
+          </Transition>
+          <div class="pub-meta">
+            <template v-if="published.pub_date">发布于 {{ fmtDate(published.pub_date) }} · </template>{{ versions.length }} 个历史版本
+          </div>
+          <div v-if="published.notes" class="pub-notes">{{ published.notes }}</div>
+          <div class="vactions">
+            <button v-if="publishedVersionDir" type="button" class="btn btn-ghost" @click="editPublishedNotes">编辑发布说明</button>
+            <button v-if="publishedVersionDir" type="button" class="btn btn-ghost" @click="selectVer(publishedVersionDir)">管理这个版本的文件</button>
+          </div>
+        </section>
+        <section v-else-if="latestLoaded" class="ix-sec">
+          <span class="pub-label muted-label">尚未发布</span>
+          <h2>还没有发布</h2>
+          <p class="pub-empty-text">在左侧选一个版本，上传文件后点「设为最新发布」。</p>
+        </section>
+      </aside>
     </div>
   </div>
 </template>
 
 <script setup>
 import { ref, computed, watch, nextTick } from 'vue';
-import { liquidCovers, liquidEntry } from '@/composables/useLiquid';
+import { liquidEntry } from '@/composables/useLiquid';
+import LiquidBackdrop from '@/components/LiquidBackdrop.vue';
 import { useRoute, useRouter } from 'vue-router';
 import { api, uploadWithProgress, uploadAppVersion } from '@/api/client';
 import { useToast } from '@/composables/useToast';
@@ -364,32 +335,31 @@ const newVerErr = ref('');
 const creatingVer = ref(false);
 const dragVer = ref(null);
 const fileInputs = {};
-const cardEls = {};
 const deletingFile = ref('');
 const publishing = ref(false);
 const sigWarn = ref(null);
 
-// 渐进披露：版本卡同时只开一张；基本信息 / 高级各自折叠
+// 右侧同时只摆一样：某个版本 / 基本信息 / 高级；都没选时是当前发布
 const openVer = ref(null);
 const advOpen = ref(false);
 const infoOpen = ref(false);
 const metaBar = ref(null);
 const advBar = ref(null);
-const verBar = ref(null); // v-for 里的 ref 是数组，但同时只渲染一张卡的保存条
+const verBar = ref(null);
 
 const jsonField = computed(() => (repoType.value === 'tauri' ? 'platforms' : 'files'));
 const displayLabel = computed(() => meta.value.displayName?.trim() || appName.value);
-// 与入口页、总览卡同一张液体封面
-const cover = computed(
-  () => liquidCovers([liquidEntry({ kind: 'app', name: appName.value, displayLabel: displayLabel.value, description: meta.value.description })])[0],
+// 背景液体：与入口页、总览里这个应用的那一幅同源
+const bgEntry = computed(() =>
+  liquidEntry({ kind: 'app', name: appName.value, displayLabel: displayLabel.value, description: meta.value.description }),
 );
 const packageChanged = computed(() => !!packageNameEdit.value.trim() && packageNameEdit.value.trim() !== appName.value);
 
 /* ── 未存改动：三处各一份，都叠在已存数据之上 ── */
 const metaEdit = useUnsaved(() => meta.value, {
   onBlocked: () => {
-    infoOpen.value = true;
-    metaBar.value?.nudge();
+    showPane('info');
+    nextTick(() => metaBar.value?.nudge());
   },
 });
 const openV = computed(() => versions.value.find(v => v.version === openVer.value) || null);
@@ -399,7 +369,7 @@ function savedNotes(v) {
   return notesDraft.value[v.version] || '';
 }
 const verEdit = useUnsaved(() => (openV.value ? { notes: savedNotes(openV.value) } : null), {
-  onBlocked: () => verBar.value?.[0]?.nudge(),
+  onBlocked: () => verBar.value?.nudge(),
 });
 const advSaved = computed(() =>
   published.value
@@ -412,8 +382,8 @@ const advSaved = computed(() =>
 );
 const advEdit = useUnsaved(() => advSaved.value, {
   onBlocked: () => {
-    advOpen.value = true;
-    advBar.value?.nudge();
+    showPane('adv');
+    nextTick(() => advBar.value?.nudge());
   },
 });
 
@@ -491,25 +461,50 @@ function versionChips(v) {
   return out;
 }
 
-function setCardEl(ver, el) {
-  if (el) cardEls[ver] = el;
-}
-/* 同时只开一张；有未存改动时不换卡，抖一下保存条 */
-function toggleVer(ver) {
-  if (verEdit.dirty) {
-    verBar.value?.[0]?.nudge();
-    return;
+/* 右侧换内容前：当前那份有未存改动就不换，抖一下它的保存条（同一页只有一份展开态） */
+function canLeavePane() {
+  if (openVer.value && verEdit.dirty) {
+    verBar.value?.nudge();
+    return false;
   }
+  if (infoOpen.value && metaEdit.dirty) {
+    metaBar.value?.nudge();
+    return false;
+  }
+  if (advOpen.value && advEdit.dirty) {
+    advBar.value?.nudge();
+    return false;
+  }
+  return true;
+}
+function showPane(name, ver = null) {
   sigWarn.value = null;
-  openVer.value = openVer.value === ver ? null : ver;
+  openVer.value = name === 'ver' ? ver : null;
+  infoOpen.value = name === 'info';
+  advOpen.value = name === 'adv';
+}
+/* 手机上右侧排在索引下面：选中后滚到内容处，不然点了看不出变化 */
+const narrow = matchMedia('(max-width: 760px)');
+function revealPane() {
+  if (narrow.matches) nextTick(() => document.querySelector('.ix-pane')?.scrollIntoView({ behavior: 'smooth', block: 'start' }));
+}
+/** 再点一次已选中的那项 = 收起回到「当前发布」 */
+function selectPane(name) {
+  const same = (name === 'info' && infoOpen.value) || (name === 'adv' && advOpen.value);
+  if (!canLeavePane()) return;
+  showPane(same ? null : name);
+  revealPane();
+}
+function selectVer(ver) {
+  if (!canLeavePane()) return;
+  showPane(openVer.value === ver ? null : 'ver', ver);
+  revealPane();
 }
 async function editPublishedNotes() {
-  if (openVer.value !== publishedVersionDir.value) toggleVer(publishedVersionDir.value);
+  if (openVer.value !== publishedVersionDir.value) selectVer(publishedVersionDir.value);
   if (openVer.value !== publishedVersionDir.value) return;
   await nextTick();
-  const card = cardEls[publishedVersionDir.value];
-  card?.scrollIntoView({ behavior: 'smooth', block: 'center' });
-  card?.querySelector('textarea')?.focus({ preventScroll: true });
+  document.querySelector('.ix-pane textarea')?.focus();
 }
 
 async function loadMeta() {
@@ -819,7 +814,7 @@ async function createVersion() {
     toast(`版本 ${ver} 已创建`);
     closeNewVer();
     await loadVersions();
-    if (!verEdit.dirty) openVer.value = ver;
+    if (canLeavePane()) showPane('ver', ver);
   } catch (e) {
     toast(e.message, 'error');
   } finally {
@@ -831,7 +826,7 @@ watch(
   () => route.params.name,
   () => {
     packageNameEdit.value = appName.value;
-    openVer.value = null;
+    showPane(null);
     loadAll();
   },
   { immediate: true },
@@ -839,25 +834,24 @@ watch(
 </script>
 
 <style scoped>
-/* 顶栏标题里的 chip 与系统字体对齐 */
-.ab-titles h1 {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  flex-wrap: wrap;
+/* 左侧版本索引里的「当前」标记 */
+.lt {
+  font-style: normal;
+  color: var(--green);
+  margin-right: 8px;
+}
+.pub-meta {
+  font-size: 13px;
+  color: var(--text2);
 }
 
-/* hero 发布说明摘要 */
+/* 发布说明摘要 */
 .pub-notes {
-  margin-top: 11px;
-  font-size: 0.8rem;
+  font-size: 14px;
   color: var(--text2);
   line-height: 1.5;
   white-space: pre-wrap;
   max-width: 640px;
-}
-.empty-pub {
-  align-items: flex-start;
 }
 .muted-label {
   color: var(--text3);
@@ -875,9 +869,6 @@ watch(
 .muted {
   color: var(--text2);
   font-size: 0.85rem;
-}
-.empty-v {
-  padding: 18px 0;
 }
 
 /* 版本卡内：草稿与无进度提示 */
@@ -928,16 +919,6 @@ watch(
 .l-title { margin: 0 0 8px; font-size: 0.95rem; font-weight: 700; }
 .lform .input { padding: 9px 12px; font-size: 14px; }
 
-/* 版本卡长出 / 收回：行高 0fr ↔ 1fr，只在过渡中裁切（平时不裁，确认层才不会被切掉） */
-.vgrow { display: grid; grid-template-rows: 1fr; }
-.vgrow > .vbody { min-height: 0; }
-.vexpand-enter-active,
-.vexpand-leave-active { transition: grid-template-rows var(--t-slow) var(--ease-out), opacity var(--t-med) var(--ease-out); }
-.vexpand-enter-active > .vbody,
-.vexpand-leave-active > .vbody { overflow: hidden; }
-.vexpand-enter-from,
-.vexpand-leave-to { grid-template-rows: 0fr; opacity: 0; }
-.vhead:focus-visible { outline: 2px solid rgba(56, 189, 248, 0.6); outline-offset: -2px; }
 .dropmini:focus-visible { outline: 2px solid rgba(56, 189, 248, 0.6); outline-offset: 2px; }
 .fdel.armed { width: auto; padding: 0 8px; font-size: 0.7rem; }
 
