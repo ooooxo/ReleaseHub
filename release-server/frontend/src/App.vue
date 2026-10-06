@@ -7,7 +7,10 @@
       <main class="app-main">
         <router-view v-slot="{ Component }">
           <transition name="fade" mode="out-in">
-            <component :is="Component" />
+            <!-- 总览缓存住：进详情再返回不重新加载，回来时自己在后台刷新 -->
+            <KeepAlive include="HomeView">
+              <component :is="Component" />
+            </KeepAlive>
           </transition>
         </router-view>
       </main>

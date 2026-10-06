@@ -136,6 +136,7 @@ const props = defineProps({
   publicBase: { type: String, default: '' },
   remaining: { type: String, default: '' },   // 临时文件：剩余时间文案（父级每秒算）
   warn: { type: Boolean, default: false },    // 临时文件：快到期
+  refreshKey: { type: Number, default: 0 },   // 变了就清缓存重取（总览从详情页回来时）
 });
 
 const { copiedKey, copy } = useCopied();
@@ -203,6 +204,13 @@ async function fetchDetail(force = false) {
   }
 }
 watch(() => keyOf(props.target), () => fetchDetail(), { immediate: true });
+watch(
+  () => props.refreshKey,
+  () => {
+    cache.clear();
+    fetchDetail(true);
+  },
+);
 
 /* ---- 应用 ---- */
 const published = computed(() => detail.value?.published || null);

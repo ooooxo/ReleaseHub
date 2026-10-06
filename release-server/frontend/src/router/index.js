@@ -7,13 +7,14 @@ const AppDetailView = () => import('@/views/AppDetailView.vue');
 const SettingsView = () => import('@/views/SettingsView.vue');
 const ResourceDetailView = () => import('@/views/ResourceDetailView.vue');
 
+const PAGE_SWAP_MS = 240;   // 与 App.vue 的换页过渡同长（--t-med 220ms + 余量）
+
 const router = createRouter({
   history: createWebHistory(import.meta.env.BASE_URL),
-  // 滚动容器是 .app-main 不是 window，路由自带的滚动够不着：hash 自己 scrollIntoView（首屏未渲染时由 HomeView 加载完再滚）
-  scrollBehavior(to) {
-    if (to.hash) document.querySelector(to.hash)?.scrollIntoView({ behavior: 'smooth', block: 'start' });
-    else document.querySelector('.app-main')?.scrollTo({ top: 0 });
-    return false;
+  // 后退回到离开时的位置；等换页过渡（out-in，--t-med）走完再滚，否则旧页还在、滚了也白滚
+  scrollBehavior(to, _from, saved) {
+    const target = saved || (to.hash ? { el: to.hash, behavior: 'smooth' } : { top: 0 });
+    return new Promise(resolve => setTimeout(() => resolve(target), PAGE_SWAP_MS));
   },
   routes: [
     { path: '/login', name: 'login', component: LoginView, meta: { guest: true } },

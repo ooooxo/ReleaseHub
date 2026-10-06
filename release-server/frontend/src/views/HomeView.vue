@@ -131,6 +131,7 @@
           :public-base="publicBase"
           :remaining="selTarget.kind === 'temp' ? remShort(selTarget.item) : ''"
           :warn="selTarget.kind === 'temp' && tempWarn(selTarget.item)"
+          :refresh-key="refreshKey"
         />
       </aside>
     </div>
@@ -138,7 +139,7 @@
 </template>
 
 <script setup>
-import { ref, onMounted, onUnmounted, computed, watch } from 'vue';
+import { ref, onMounted, onUnmounted, computed, watch, onActivated, onDeactivated } from 'vue';
 import { useRouter } from 'vue-router';
 import { api, uploadTemp } from '@/api/client';
 import { useUploads } from '@/stores/uploads';
@@ -195,9 +196,8 @@ const groups = computed(() =>
   ].filter(g => g.items.length),
 );
 
-/* ---- 选中：指上去（稍停一下）或聚焦就换右侧内容；手机没有右侧，点了直接进详情 ---- */
+/* ---- 选中：指上去（稍停一下）或聚焦就换右侧内容；点名字进详情 ---- */
 const HOVER_MS = 70;
-const mobile = matchMedia('(max-width: 760px)');
 const selKey = ref('');
 const selTarget = computed(() => {
   const k = selKey.value;
@@ -220,7 +220,7 @@ function hoverCancel() {
   clearTimeout(hoverT);
 }
 function activate(key) {
-  if (!mobile.matches) return pick(key);
+  pick(key);
   if (key.startsWith('temp:')) router.push(`/temp-transfer/${encodeURIComponent(key.slice(5))}`);
   else goItem(allItems.value.find(x => x.key === key));
 }
@@ -330,15 +330,19 @@ async function loadTempList() {
   }
 }
 
-async function load() {
-  loading.value = true;
-  loadError.value = '';
+/** silent：总览从缓存里回来时的后台刷新——不出「加载中」、不清掉已有内容，失败只弹提示 */
+async function load({ silent = false } = {}) {
+  if (!silent) {
+    loading.value = true;
+    loadError.value = '';
+  }
   try {
     const [a, r] = await Promise.all([api('GET', '/api/apps'), api('GET', '/api/resources')]);
     apps.value = a;
     libraries.value = r;
   } catch (e) {
-    loadError.value = e.message;
+    if (silent) toast(`刷新失败：${e.message}`, 'error');
+    else loadError.value = e.message;
   } finally {
     loading.value = false;
   }
@@ -414,14 +418,38 @@ async function createLibrary() {
   }
 }
 
-onMounted(async () => {
-  // 计时器先于 await 起：页面在加载中就被离开时，onUnmounted 才清得到
+/* 计时器跟着「可见」走：被缓存起来（进了详情页）时停，回来再起 */
+function startTimers() {
   tempTickTimer = setInterval(() => {
     tempTick.value += 1;
   }, 1000);
   tempListTimer = setInterval(() => {
     loadTempList();
   }, 40000);
+}
+function stopTimers() {
+  clearInterval(tempListTimer);
+  clearInterval(tempTickTimer);
+}
+let firstActivation = true;
+onActivated(() => {
+  startTimers();
+  if (firstActivation) {
+    firstActivation = false;
+    return;
+  }
+  bg?.resume();
+  load({ silent: true });   // 详情页里可能改过：后台刷新列表与右侧内容
+  refreshKey.value += 1;
+});
+onDeactivated(() => {
+  stopTimers();
+  clearTimeout(hoverT);
+  bg?.pause();
+});
+const refreshKey = ref(0);
+
+onMounted(async () => {
   loadTtls();
   loadPublicBase();
   await load();
@@ -430,8 +458,7 @@ onMounted(async () => {
 });
 
 onUnmounted(() => {
-  if (tempListTimer) clearInterval(tempListTimer);
-  if (tempTickTimer) clearInterval(tempTickTimer);
+  stopTimers();
   clearTimeout(hoverT);
   bg?.stop();
 });

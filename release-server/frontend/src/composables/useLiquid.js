@@ -55,7 +55,7 @@ export function mountLiquid(canvas, entry) {
  * flowTo 按入口页的做法从当前液体流到新库的液体（MIX_MS，in-out），流到一半再换也接得上。
  */
 export function mountLiquidBackground(canvas, entry) {
-  const noop = { flowTo: () => {}, stop: () => {} };
+  const noop = { flowTo: () => {}, pause: () => {}, resume: () => {}, stop: () => {} };
   if (!HP) return noop;
   const fit = () => {
     const k = Math.min(devicePixelRatio || 1, 1.5) * BG_RES;
@@ -73,7 +73,7 @@ export function mountLiquidBackground(canvas, entry) {
   let B = A;
   let t0 = 0;
   let mix = 0;
-  const stopLoop = HP.loop((_dt, now) => {
+  const tick = (_dt, now) => {
     if (t0) {
       const t = Math.min(1, (now - t0) / MIX_MS);
       mix = reduced ? 1 : HP.EASE_IN_OUT(t);
@@ -84,10 +84,20 @@ export function mountLiquidBackground(canvas, entry) {
       }
     }
     L.draw(reduced ? 20 : now / 1000, A, B, mix);
-  });
+  };
+  let stopLoop = HP.loop(tick);
   const ro = new ResizeObserver(fit);
   ro.observe(canvas);
   return {
+    /** 页面被缓存起来（不可见）时停掉渲染，回来再接着跑 */
+    pause() {
+      stopLoop();
+      stopLoop = () => {};
+    },
+    resume() {
+      stopLoop();
+      stopLoop = HP.loop(tick);
+    },
     flowTo(next) {
       if (t0) A = B;   // 上一段还没流完：从它的终点接着流，不跳
       B = L.params(next);
