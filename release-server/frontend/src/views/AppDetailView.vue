@@ -5,6 +5,7 @@
       <button type="button" class="back" v-tip="'返回总览'" @click="router.push('/')">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M15 18l-6-6 6-6" /></svg>
       </button>
+      <span class="ab-cover"><img v-if="cover" :src="cover" alt="" /></span>
       <div class="ab-titles">
         <h1>
           {{ displayLabel }}
@@ -99,7 +100,7 @@
         <div v-if="published.notes" class="pub-notes">{{ published.notes }}</div>
       </div>
       <div class="pub-actions">
-        <button v-if="latestAppShortcutUrl" type="button" class="btn btn-primary" @click="copy(latestAppShortcutUrl)">
+        <button v-if="latestAppShortcutUrl" type="button" class="btn btn-ghost" @click="copy(latestAppShortcutUrl)">
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><rect x="9" y="9" width="11" height="11" rx="2" /><path d="M5 15V5a2 2 0 0 1 2-2h10" /></svg>
           复制最新版本页
         </button>
@@ -320,6 +321,7 @@
 
 <script setup>
 import { ref, computed, watch, nextTick } from 'vue';
+import { liquidCovers, liquidEntry } from '@/composables/useLiquid';
 import { useRoute, useRouter } from 'vue-router';
 import { api, uploadWithProgress, uploadAppVersion } from '@/api/client';
 import { useToast } from '@/composables/useToast';
@@ -377,6 +379,10 @@ const verBar = ref(null); // v-for 里的 ref 是数组，但同时只渲染一�
 
 const jsonField = computed(() => (repoType.value === 'tauri' ? 'platforms' : 'files'));
 const displayLabel = computed(() => meta.value.displayName?.trim() || appName.value);
+// 与入口页、总览卡同一张液体封面
+const cover = computed(
+  () => liquidCovers([liquidEntry({ kind: 'app', name: appName.value, displayLabel: displayLabel.value, description: meta.value.description })])[0],
+);
 const packageChanged = computed(() => !!packageNameEdit.value.trim() && packageNameEdit.value.trim() !== appName.value);
 
 /* ── 未存改动：三处各一份，都叠在已存数据之上 ── */

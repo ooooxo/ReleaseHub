@@ -3,10 +3,7 @@
     <div class="rail-inner">
       <div class="rail-head">
         <RouterLink to="/" class="rail-brand" v-tip="'返回总览'">
-          <span class="rail-bd">
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linejoin="round"><rect x="3" y="3" width="18" height="18" rx="3" /><path d="M3 9h18M9 21V9" /></svg>
-          </span>
-          <span class="rail-bt"><b>ReleaseHub</b><span>releases 卷</span></span>
+          <span class="rail-wm">ooooxo</span><span class="rail-name">Release Hub</span>
         </RouterLink>
         <button type="button" class="rail-collapse" v-tip="'收起侧栏'" @click="toggle">
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M15 6l-6 6 6 6" /></svg>
@@ -120,7 +117,7 @@ onUnmounted(() => {
   top: 0;
   align-self: flex-start;
   z-index: 2;
-  background: var(--surface);
+  background: var(--bg);
   border-right: 1px solid var(--border);
   box-sizing: border-box;
   overflow: hidden;
@@ -149,49 +146,30 @@ onUnmounted(() => {
 .rail-brand {
   flex: 1;
   display: flex;
-  align-items: center;
-  gap: 11px;
+  align-items: baseline;
+  gap: 10px;
   text-decoration: none;
   color: inherit;
   min-width: 0;
 }
-.rail-bd {
-  flex: none;
-  width: 36px;
-  height: 36px;
-  border-radius: 10px;
-  background: var(--accent-tint);
-  color: var(--accent);
-  display: grid;
-  place-items: center;
-}
-.rail-bd svg {
-  width: 20px;
-  height: 20px;
-}
-.rail-bt {
-  min-width: 0;
-}
-.rail-bt b {
-  display: block;
-  font-size: 0.95rem;
-  font-weight: 750;
+/* 品牌位：与入口页同一枚字标，后面跟本服务名 */
+.rail-wm {
+  font-size: 14px;
+  font-weight: 700;
   letter-spacing: -0.01em;
   color: var(--text);
 }
-.rail-bt span {
-  display: block;
-  font-size: 0.66rem;
+.rail-name {
+  font-size: 13px;
   color: var(--text3);
-  font-family: var(--font-mono);
-  margin-top: 2px;
+  white-space: nowrap;
 }
 .rail-collapse {
   flex: none;
   width: 30px;
   height: 30px;
-  border-radius: 8px;
-  border: 1px solid var(--border);
+  border-radius: 15px;
+  border: 0;
   background: transparent;
   color: var(--text3);
   cursor: pointer;
@@ -201,8 +179,7 @@ onUnmounted(() => {
 }
 .rail-collapse:hover {
   color: var(--text);
-  border-color: var(--border-strong);
-  background: var(--surface2);
+  background: rgba(255, 255, 255, 0.06);
 }
 .rail-collapse svg {
   width: 16px;
@@ -210,16 +187,13 @@ onUnmounted(() => {
 }
 
 .rail-disk {
-  background: var(--inset);
+  background: var(--surface);
   border: 1px solid var(--border);
   border-radius: var(--radius);
   padding: 15px 15px 14px;
 }
 .rail-label {
-  font-size: 0.62rem;
-  font-weight: 650;
-  letter-spacing: 0.1em;
-  text-transform: uppercase;
+  font-size: 12px;
   color: var(--text3);
 }
 .rail-hero {
@@ -276,10 +250,8 @@ onUnmounted(() => {
   gap: 3px;
 }
 .rail-sub span {
-  font-size: 0.6rem;
+  font-size: 12px;
   color: var(--text3);
-  letter-spacing: 0.06em;
-  text-transform: uppercase;
 }
 .rail-sub b {
   font-family: var(--font-mono);
@@ -333,10 +305,10 @@ onUnmounted(() => {
   color: var(--text);
   background: var(--surface2);
 }
+/* 选中靠墨阶 + 抬起的底，不用彩色色块（与入口管理页的分段选择同一个规则） */
 .rail-link--active {
-  color: var(--accent-text);
-  background: var(--accent-tint);
-  border-color: rgba(56, 189, 248, 0.25);
+  color: var(--text);
+  background: rgba(255, 255, 255, 0.09);
 }
 
 .rail-expand {
@@ -346,7 +318,7 @@ onUnmounted(() => {
   z-index: 50;
   width: 40px;
   height: 40px;
-  border-radius: 11px;
+  border-radius: 20px;
   border: 1px solid var(--border);
   background: var(--surface);
   color: var(--text2);
@@ -357,8 +329,8 @@ onUnmounted(() => {
   transition: color var(--t-fast) var(--ease-hover), border-color var(--t-fast) var(--ease-hover);
 }
 .rail-expand:hover {
-  color: var(--accent-text);
-  border-color: rgba(56, 189, 248, 0.4);
+  color: var(--text);
+  border-color: var(--border-strong);
 }
 .rail-expand svg {
   width: 19px;

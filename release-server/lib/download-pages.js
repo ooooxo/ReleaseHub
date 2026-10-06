@@ -5,6 +5,9 @@
  */
 const { fmtBytesServer, fileBadgeLabel } = require('./download-utils');
 
+/* 液体大图用入口页的同一个库：同域根路径 /liquid.js 由入口页提供（nginx：/ → 入口页，/releasehub/ → 本服务） */
+const LIQUID_SRC = '/liquid.js';
+
 /* 类型色：与入口页、管理端胶囊同色——应用天蓝、资源库绿、临时文件琥珀（有期限） */
 const KIND = {
   app: { label: '应用', color: '#38bdf8' },
@@ -15,7 +18,8 @@ const KIND = {
 const PAGE_CSS = `
 :root {
   --night: #0c0c0e; --ink: #f2f3f5; --ink-2: #9ba1ac; --ink-3: #5d646f; --line: rgba(242, 243, 245, .09);
-  --raise: rgba(255, 255, 255, .03); --raise-hover: rgba(255, 255, 255, .055);
+  /* 卡片底用实色：半透明的底压在液体下缘上会一截亮一截暗 */
+  --raise: #141416; --raise-hover: #19191c;
   --font: -apple-system, BlinkMacSystemFont, 'PingFang SC', 'HarmonyOS Sans SC', 'Microsoft YaHei', 'Noto Sans SC', system-ui, sans-serif;
   --mono: ui-monospace, 'SF Mono', 'Cascadia Code', Consolas, monospace;
   --ease-out: cubic-bezier(0.23, 1, 0.32, 1); --ease-hover: cubic-bezier(0.4, 0, 0.2, 1);
@@ -28,11 +32,19 @@ a { color: inherit; text-decoration: none; }
 :focus-visible { outline: 2px solid var(--ink); outline-offset: 3px; border-radius: 6px; }
 .num { font-family: var(--mono); font-variant-numeric: tabular-nums; }
 
-.page { max-width: 1120px; margin: 0 auto; padding: 0 var(--pad) 64px; min-height: 100vh; display: flex; flex-direction: column; }
+/* 液体大图：与入口页同一个库、同一种画法（名字定种子、类型定色调、液面压进名字）。左缘和下缘溶进夜色 */
+.art { position: absolute; right: 0; top: 0; width: 58%; height: 100vh; overflow: hidden; pointer-events: none; }
+.page.list ~ .art { height: 560px; }
+.art canvas { position: absolute; inset: 0; width: 100%; height: 100%; display: block; }
+.art::after { content: ''; position: absolute; inset: 0 0 0 -2px;
+  background: linear-gradient(90deg, var(--night) 0%, var(--night) 3%, rgba(12, 12, 14, 0) 34%), linear-gradient(0deg, var(--night) 0%, rgba(12, 12, 14, 0) 38%); }
+.page { position: relative; z-index: 1; max-width: 1120px; margin: 0 auto; padding: 0 var(--pad) 64px; min-height: 100vh; display: flex; flex-direction: column; }
 .brandrow { padding: 28px 0; }
 .wm { font-size: 14px; font-weight: 700; letter-spacing: -0.01em; }
 .main { flex: 1; display: flex; flex-direction: column; gap: 44px; padding-top: 7vh; }
 .page.single .main { justify-content: center; padding: 0 0 12vh; }
+.page.single .hero { max-width: min(560px, 40vw); }
+.page.list .hero { max-width: min(560px, 40vw); min-height: 300px; justify-content: flex-end; }
 
 .hero { display: flex; flex-direction: column; gap: 18px; max-width: 760px; }
 h1 { margin: 0; font-size: clamp(40px, 5.2vw, 76px); line-height: 1.04; font-weight: 650; letter-spacing: -0.045em; overflow-wrap: anywhere; }
@@ -87,6 +99,11 @@ h1.long { font-size: clamp(28px, 3.2vw, 44px); line-height: 1.18; letter-spacing
 
 @media (max-width: 760px) {
   :root { --pad: 22px; }
+  .art, .page.list ~ .art { width: 100%; height: 56vh; }
+  .art::after { inset: 0; background: linear-gradient(180deg, rgba(12, 12, 14, 0) 30%, var(--night) 96%); }
+  .page.single .main { justify-content: flex-end; }
+  .page.single .hero, .page.list .hero { max-width: none; }
+  .page.list .hero { min-height: 42vh; }
   .brandrow { padding: 20px 0; }
   .main { gap: 32px; padding-top: 3vh; }
   .page.single .main { padding-bottom: 8vh; }
@@ -140,7 +157,29 @@ function faviconHref(label, kind) {
 }
 
 /** 所有分享页的外壳：顶部字标 + 主区。layout = 'single'（单幅，竖向居中）| 'list'（标题区 + 列表） */
-function shell({ title, kind, iconLabel, layout, main, script = '' }) {
+/** 液体脚本：拿本页的名字 / 简介 / 路径算参数（路径里的 /app/ 或 /r/ 决定色调，与入口页里同一个库的链接同形） */
+function liquidScript(name, description) {
+  const entry = JSON.stringify({ name: String(name), description: String(description || ''), url: '' }).replace(/</g, '\\u003c');
+  return `<script src="${LIQUID_SRC}"></script>
+<script>
+(function () {
+  var HP = window.HP, cv = document.querySelector('.art canvas');
+  if (!HP) { console.error('liquid.js 未加载：液体大图不渲染'); return; }
+  var mobile = matchMedia('(max-width: 760px)').matches;
+  var fit = function () { var k = Math.min(devicePixelRatio || 1, mobile ? 1.25 : 1.5) * (mobile ? 0.4 : 0.6); cv.width = Math.round(cv.clientWidth * k); cv.height = Math.round(cv.clientHeight * k); };
+  fit();
+  var L = HP.liquid(cv, false, mobile);
+  if (!L) { console.error('WebGL 不可用：液体大图不渲染'); return; }
+  var e = ${entry}; e.url = location.pathname;
+  var p = L.params(e), still = matchMedia('(prefers-reduced-motion: reduce)').matches;
+  HP.loop(function (dt, now) { L.draw(still ? 20 : now / 1000, p, p, 0); });
+  new ResizeObserver(fit).observe(cv);
+})();
+</script>`;
+}
+
+/** liquid = false 关掉液体（404 / 失效这类提示页）；description 参与液体形态判断（日志 → 层流、资源 → 台阶…） */
+function shell({ title, kind, iconLabel, layout, main, script = '', liquid = true, description = '' }) {
   return `<!DOCTYPE html>
 <html lang="zh-CN">
 <head>
@@ -156,6 +195,8 @@ function shell({ title, kind, iconLabel, layout, main, script = '' }) {
   <header class="brandrow"><span class="wm">ooooxo</span></header>
   <main class="main">${main}</main>
 </div>
+${liquid ? '<div class="art" aria-hidden="true"><canvas></canvas></div>' : ''}
+${liquid ? liquidScript(iconLabel, description) : ''}
 ${script}
 </body>
 </html>`;
@@ -170,6 +211,7 @@ function renderNotice(title, text, kind = 'app') {
     kind,
     iconLabel: '!',
     layout: 'single',
+    liquid: false,
     main: `<section class="hero"><h1>${htmlEsc(title)}</h1><div class="desc">${htmlEsc(text)}</div></section>`,
   });
 }
@@ -215,6 +257,7 @@ function renderVersionBrowserHtml(opts) {
     kind: 'app',
     iconLabel: displayLabel,
     layout: 'list',
+    description,
     main: `<section class="hero">
     <div class="chips">${kindChip('app')}${verChip(version)}</div>
     <h1>${htmlEsc(displayLabel)}</h1>
@@ -252,6 +295,7 @@ function renderResourceLibraryHtml(opts) {
     kind: 'resource',
     iconLabel: displayLabel,
     layout: 'list',
+    description,
     main: `<section class="hero">
     <div class="chips">${kindChip('resource')}${list.length ? chip(`${list.length} 个文件`) : ''}</div>
     <h1>${htmlEsc(displayLabel)}</h1>
@@ -270,6 +314,7 @@ function renderResourceItemLandingHtml(opts) {
     kind: 'resource',
     iconLabel: title,
     layout: 'single',
+    description,
     main: `<section class="hero">
     <div class="chips">${kindChip('resource')}${chip(libraryName)}${verChip(itemVersion)}${platformChip(badge)}${sizeChip(size)}</div>
     ${titleH1(title)}
@@ -344,6 +389,7 @@ function renderFolderBrowseHtml(opts) {
     kind,
     iconLabel: displayLabel,
     layout: 'list',
+    description,
     main: `<section class="hero">
     <div class="chips">${kindChip(kind)}</div>
     <h1>${htmlEsc(displayLabel)}</h1>

@@ -1,32 +1,23 @@
 <template>
-  <div class="login">
-    <div class="card panel">
-      <div class="lbrand">
-        <span class="lbadge">
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linejoin="round">
-            <rect x="3" y="3" width="18" height="18" rx="3" />
-            <path d="M3 9h18M9 21V9" />
-          </svg>
-        </span>
-        <span class="lbrand-t">Release Hub</span>
-      </div>
-      <h1>管理后台</h1>
-      <p class="hint">输入管理员密码登录</p>
+  <div class="gate">
+    <span class="wm">ooooxo</span>
+    <div class="art"><canvas ref="canvas" /></div>
+    <div class="side">
+      <div class="eyebrow">管理后台</div>
+      <h1>Release Hub</h1>
       <form @submit.prevent="submit">
-        <div>
-          <span class="field-label">密码</span>
-          <input
-            v-model="password"
-            type="password"
-            class="input"
-            placeholder="••••••••"
-            autocomplete="current-password"
-            :disabled="loading"
-          />
-        </div>
-        <p v-if="err" class="err">{{ err }}</p>
-        <button type="submit" class="btn btn-primary full" :disabled="loading">
-          {{ loading ? '验证中…' : '登录' }}
+        <input
+          v-model="password"
+          type="password"
+          class="input"
+          placeholder="管理密码"
+          aria-label="管理密码"
+          autocomplete="current-password"
+          :disabled="loading"
+        />
+        <p class="err" role="alert">{{ err }}</p>
+        <button type="submit" class="btn btn-primary" :disabled="loading">
+          {{ loading ? '验证中…' : '进入' }}
         </button>
       </form>
     </div>
@@ -34,11 +25,12 @@
 </template>
 
 <script setup>
-import { ref } from 'vue';
+import { ref, onMounted, onUnmounted } from 'vue';
 import { useRoute, useRouter } from 'vue-router';
 import { useAuthStore } from '@/stores/auth';
 import { api } from '@/api/client';
 import { useToast } from '@/composables/useToast';
+import { mountLiquid } from '@/composables/useLiquid';
 
 const password = ref('');
 const err = ref('');
@@ -47,6 +39,13 @@ const route = useRoute();
 const router = useRouter();
 const auth = useAuthStore();
 const { toast } = useToast();
+const canvas = ref(null);
+// 登录页的液面压进服务名，形态取「流动」——与入口管理页的登录页同一种画法
+let stopLiquid = () => {};
+onMounted(() => {
+  stopLiquid = mountLiquid(canvas.value, { name: 'Release Hub', description: '', url: '', motif: 'flow' });
+});
+onUnmounted(() => stopLiquid());
 
 async function submit() {
   err.value = '';
@@ -70,66 +69,94 @@ async function submit() {
 </script>
 
 <style scoped>
-.login {
-  min-height: 100vh;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  padding: 24px;
+/* 与入口管理页的登录页同一构图：左侧标题与表单，右侧 62% 实时液体，左上角字标 */
+.gate {
+  position: fixed;
+  inset: 0;
 }
-.panel {
+.art {
+  position: absolute;
+  right: 0;
+  top: 0;
+  bottom: 0;
+  width: 62%;
+  overflow: hidden;
+}
+.art canvas {
+  position: absolute;
+  inset: 0;
   width: 100%;
-  max-width: 380px;
-  padding: 38px 34px;
+  height: 100%;
+  display: block;
 }
-.lbrand {
-  display: inline-flex;
-  align-items: center;
-  gap: 9px;
-  margin-bottom: 22px;
+/* 遮罩从一段实底起、往左多盖 2px：画布左缘落在小数像素上会抗锯齿出一道亮线 */
+.art::after {
+  content: '';
+  position: absolute;
+  inset: 0 0 0 -2px;
+  pointer-events: none;
+  background: linear-gradient(90deg, var(--bg) 0%, var(--bg) 3%, rgba(12, 12, 14, 0) 32%);
 }
-.lbadge {
-  width: 34px;
-  height: 34px;
-  border-radius: 10px;
-  background: var(--accent-tint);
-  color: var(--accent);
-  display: grid;
-  place-items: center;
-}
-.lbadge svg {
-  width: 19px;
-  height: 19px;
-}
-.lbrand-t {
-  font-size: 0.72rem;
-  font-weight: 700;
-  letter-spacing: 0.22em;
-  text-transform: uppercase;
-  color: var(--accent-text);
-}
-h1 {
-  margin: 0 0 6px;
-  font-size: 1.4rem;
-}
-.hint {
-  margin: 0;
-  color: var(--text2);
+.wm {
+  position: absolute;
+  left: 40px;
+  top: 28px;
+  z-index: 2;
   font-size: 14px;
+  font-weight: 700;
+  letter-spacing: -0.01em;
 }
-form {
-  margin-top: 22px;
+.side {
+  position: absolute;
+  left: 7%;
+  top: 0;
+  bottom: 0;
+  width: min(380px, 80vw);
+  z-index: 2;
   display: flex;
   flex-direction: column;
+  justify-content: center;
   gap: 14px;
 }
-.full {
-  width: 100%;
-  padding: 12px;
+.eyebrow {
+  font-size: 14px;
+  color: var(--text3);
+}
+h1 {
+  margin: 0 0 18px;
+  font-size: clamp(40px, 4.6vw, 68px);
+  line-height: 1.04;
+  font-weight: 650;
+  letter-spacing: -0.04em;
+}
+form {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
 }
 .err {
   margin: 0;
-  color: var(--danger);
+  min-height: 20px;
   font-size: 13px;
+  color: var(--danger-text);
+}
+@media (max-width: 900px) {
+  .art {
+    width: 100%;
+    opacity: 0.55;
+  }
+  .art::after {
+    background: linear-gradient(180deg, rgba(12, 12, 14, 0.2), var(--bg) 85%);
+  }
+  .side {
+    left: 24px;
+    right: 24px;
+    width: auto;
+    justify-content: flex-end;
+    padding-bottom: 12vh;
+  }
+  .wm {
+    left: 24px;
+  }
 }
 </style>

@@ -9,6 +9,7 @@
       >
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M15 18l-6-6 6-6" /></svg>
       </button>
+      <span class="ab-cover"><img v-if="cover" :src="cover" alt="" /></span>
       <div class="ab-titles">
         <h1>
           {{ displayLabel }}
@@ -160,7 +161,7 @@
           </div>
           <p v-if="it.description || itemCardSubtitle(it)" class="fc-desc">{{ it.description || itemCardSubtitle(it) }}</p>
           <div class="fc-foot">
-            <a class="btn btn-primary btn-sm" :href="it.downloadUrl" target="_blank" rel="noopener noreferrer" @click.stop>
+            <a class="btn btn-ghost btn-sm" :href="it.downloadUrl" target="_blank" rel="noopener noreferrer" @click.stop>
               <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4M7 10l5 5 5-5M12 15V3" /></svg>
               下载
             </a>
@@ -264,6 +265,7 @@
 
 <script setup>
 import { ref, computed, watch, onUnmounted } from 'vue';
+import { liquidCovers, liquidEntry } from '@/composables/useLiquid';
 import { useRoute, useRouter } from 'vue-router';
 import { api, uploadResource } from '@/api/client';
 import { useToast } from '@/composables/useToast';
@@ -315,6 +317,10 @@ const metaEdit = useUnsaved(() => meta.value, {
 
 const idChanged = computed(() => !!idEdit.value.trim() && idEdit.value.trim() !== libraryName.value);
 const displayLabel = computed(() => meta.value.displayName?.trim() || libraryName.value);
+// 与入口页、总览卡同一张液体封面
+const cover = computed(
+  () => liquidCovers([liquidEntry({ kind: 'resource', name: libraryName.value, displayLabel: displayLabel.value, description: meta.value.description })])[0],
+);
 
 /* 同一页同时只开一张；有未存改动时不换卡，抖一下保存条 */
 function toggleOpen(id) {
@@ -647,10 +653,8 @@ watch(
 /* 库设置内分隔 */
 .settings-sep {
   margin-top: 4px;
-  font-size: 0.66rem;
+  font-size: 12px;
   font-weight: 650;
-  letter-spacing: 0.08em;
-  text-transform: uppercase;
   color: var(--text3);
 }
 .settings-note {
@@ -898,10 +902,8 @@ watch(
 }
 .fc-col h4 {
   margin: 0 0 11px;
-  font-size: 0.66rem;
+  font-size: 12px;
   font-weight: 650;
-  letter-spacing: 0.08em;
-  text-transform: uppercase;
   color: var(--text3);
 }
 .fc-col .kv .v.mono {

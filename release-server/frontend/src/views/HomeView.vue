@@ -3,7 +3,7 @@
     <header class="page-head">
       <h1>总览</h1>
       <p class="stat-line">
-        <b>{{ apps.length }}</b> 应用<span class="dot">·</span><b>{{ libraries.length }}</b> 资源库<span class="dot">·</span><b>{{ tempItems.length }}</b> 临时分享
+        <b>{{ apps.length }}</b> 应用<span class="dot">·</span><b>{{ libraries.length }}</b> 资源库<span class="dot">·</span><b>{{ tempItems.length }}</b> 临时文件
       </p>
     </header>
 
@@ -14,10 +14,10 @@
     </p>
 
     <template v-else>
-      <!-- 临时分享：投放格 + 流动临时卡 -->
+      <!-- 临时文件：投放格 + 流动临时卡 -->
       <section id="temp-hub" class="section">
         <div class="section-bar">
-          <div class="sb-l"><h2>临时分享</h2><span class="sb-count">到期自删</span></div>
+          <div class="sb-l"><h2>临时文件</h2><span class="sb-count">到期自删</span></div>
         </div>
         <div class="bento">
           <div class="temp-cell">
@@ -148,22 +148,14 @@
 
         <TransitionGroup v-else name="slide-up" tag="div" class="bento">
           <button
-            v-for="it in allItems"
+            v-for="(it, i) in allItems"
             :key="it.key"
             type="button"
             class="tile"
             @click="goItem(it)"
           >
+            <span class="cover"><img v-if="covers[i]" :src="covers[i]" alt="" /></span>
             <div class="t-head">
-              <span class="ico" :class="it.kind === 'resource' ? 'is-green' : it.repoType === 'tauri' ? '' : 'is-indigo'">
-                <svg v-if="it.kind === 'resource'" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linejoin="round">
-                  <path d="M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2Z" />
-                </svg>
-                <svg v-else viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linejoin="round">
-                  <rect x="3" y="3" width="18" height="18" rx="3" />
-                  <path d="M3 9h18M9 21V9" />
-                </svg>
-              </span>
               <div class="t-titles">
                 <span class="t-name">{{ it.displayLabel || it.name }}</span>
                 <span v-if="it.displayName" class="t-pkg">{{ it.name }}</span>
@@ -199,6 +191,7 @@ import FolderAwareDropzone from '@/components/FolderAwareDropzone.vue';
 import Layer from '@/components/ui/Layer.vue';
 import { useToast } from '@/composables/useToast';
 import { formatRemainingSec } from '@/utils/format-remaining';
+import { liquidCovers, liquidEntry } from '@/composables/useLiquid';
 
 const router = useRouter();
 const { toast } = useToast();
@@ -232,6 +225,8 @@ const allItems = computed(() => {
   const r = libraries.value.map(x => ({ kind: 'resource', key: `res:${x.name}`, ...x }));
   return [...a, ...r];
 });
+// 每个库一张液体封面，与入口页同一个库、同名同形
+const covers = computed(() => liquidCovers(allItems.value.map(liquidEntry)));
 
 function goItem(it) {
   if (it.kind === 'app') {
@@ -548,11 +543,13 @@ h1 {
   background: var(--surface);
   border: 1px solid var(--border);
   border-radius: var(--radius);
-  padding: 17px;
+  padding: 0 16px 16px;
+  overflow: hidden;
   display: flex;
   flex-direction: column;
   text-align: left;
   color: inherit;
+  font: inherit;
   cursor: pointer;
   transition: box-shadow var(--t-fast) var(--ease-out), border-color var(--t-fast) var(--ease-out), transform var(--t-fast) var(--ease-out);
   min-height: 148px;
@@ -564,27 +561,18 @@ h1 {
 .tile:active {
   transform: scale(0.985);
 }
-.ico {
-  width: 38px;
-  height: 38px;
-  border-radius: 11px;
-  background: var(--accent-tint);
-  color: var(--accent);
-  display: grid;
-  place-items: center;
-  flex: none;
+/* 液体封面：贴满卡顶，卡的圆角裁它 */
+.cover {
+  display: block;
+  height: 112px;
+  margin: 0 -16px 14px;
+  background: var(--inset);
 }
-.ico svg {
-  width: 20px;
-  height: 20px;
-}
-.ico.is-indigo {
-  background: var(--indigo-tint);
-  color: var(--indigo);
-}
-.ico.is-green {
-  background: var(--green-tint);
-  color: var(--green);
+.cover img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  display: block;
 }
 .t-head {
   display: flex;
@@ -598,10 +586,10 @@ h1 {
 }
 .t-name {
   display: block;
-  font-size: 1.1rem;
-  font-weight: 700;
+  font-size: 17px;
+  font-weight: 650;
   line-height: 1.25;
-  letter-spacing: -0.01em;
+  letter-spacing: -0.015em;
   color: var(--text);
   margin: 1px 0 5px;
   white-space: nowrap;
@@ -612,12 +600,8 @@ h1 {
   display: inline-block;
   max-width: 100%;
   font-family: var(--font-mono);
-  font-size: 10.5px;
-  letter-spacing: 0.02em;
+  font-size: 12px;
   color: var(--text3);
-  background: var(--inset);
-  padding: 2px 7px;
-  border-radius: var(--radius-xs);
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
@@ -640,10 +624,7 @@ h1 {
 }
 .ver-block .ver-label {
   display: block;
-  font-size: 0.62rem;
-  font-weight: 650;
-  letter-spacing: 0.1em;
-  text-transform: uppercase;
+  font-size: 12px;
   color: var(--text3);
   margin-bottom: 2px;
 }
@@ -657,27 +638,6 @@ h1 {
   color: var(--text3);
   font-family: var(--font);
   font-size: 0.82rem;
-}
-.chip {
-  font-size: 0.66rem;
-  font-weight: 700;
-  letter-spacing: 0.04em;
-  padding: 4px 10px;
-  border-radius: 999px;
-  line-height: 1.2;
-  flex: none;
-}
-.chip.tauri {
-  color: var(--accent);
-  background: var(--accent-tint);
-}
-.chip.general {
-  color: var(--indigo);
-  background: var(--indigo-tint);
-}
-.chip.resource {
-  color: var(--green);
-  background: var(--green-tint);
 }
 
 /* 投放格：拖进来就交给上传托盘，下面一排挑有效期 */
